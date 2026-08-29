@@ -43,6 +43,8 @@ type MockTrip = {
   vehicle: { make: string; model: string; licensePlate: string; color: string };
   /** Driving geometry, fetched once at booking. Null when routing failed. */
   route: LatLng[] | null;
+  /** Epoch ms for a scheduled pickup; the clock starts from it. */
+  scheduledFor?: number;
 };
 
 const trips = new Map<string, MockTrip>();
@@ -53,12 +55,15 @@ const DRIVERS = [
   { name: "Priya N.", phone: "+14155550170", make: "Ford", model: "Escape", plate: "6TRW905", color: "Blue" },
 ];
 
+/** A scheduled trip's clock starts at its pickup time, not at booking. */
 function elapsedSeconds(trip: MockTrip): number {
-  return (Date.now() - trip.bookedAt) / 1000;
+  return (Date.now() - (trip.scheduledFor ?? trip.bookedAt)) / 1000;
 }
 
 function statusFor(trip: MockTrip): TripStatus {
   if (trip.pinned) return trip.pinned;
+  // Nothing is dispatched until the pickup time comes round.
+  if (trip.scheduledFor && Date.now() < trip.scheduledFor) return "scheduled";
   const elapsed = elapsedSeconds(trip);
   let current: TripStatus = "processing";
   for (const step of TIMELINE) {
@@ -154,6 +159,7 @@ export async function createMockTrip(request: TripRequest): Promise<Trip> {
     },
     // Looked up once here rather than on every poll.
     route: await getRoute(request.pickup, request.dropoff),
+    scheduledFor: request.pickupTimeMs,
   };
   trips.set(trip.requestId, trip);
   return toTrip(trip);

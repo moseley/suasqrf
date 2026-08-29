@@ -46,7 +46,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const { guest, productId, fareId, note } = (payload ?? {}) as Record<string, unknown>;
+  const { guest, productId, fareId, note, pickupTime } = (payload ?? {}) as Record<
+    string,
+    unknown
+  >;
+  const pickupTimeMs = typeof pickupTime === "number" ? pickupTime : undefined;
   const body = (payload ?? {}) as Record<string, unknown>;
 
   // Callers may send coordinates directly, or plain addresses to resolve here.
@@ -91,6 +95,7 @@ export async function POST(request: Request) {
       dropoff,
       productId: "mock-uberx",
       noteForDriver: typeof note === "string" ? note : undefined,
+      pickupTimeMs,
     });
     return NextResponse.json({ configured: true, sandbox: true, mock: true, ...trip });
   }
@@ -120,6 +125,7 @@ export async function POST(request: Request) {
       productId: chosenProduct,
       fareId: chosenFare,
       noteForDriver: typeof note === "string" ? note : undefined,
+      pickupTimeMs,
     });
 
     return NextResponse.json({ configured: true, sandbox: config.sandbox, ...trip });

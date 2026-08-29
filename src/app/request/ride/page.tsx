@@ -5,6 +5,15 @@ import { useEffect, useState } from "react";
 import { Screen, ScreenHeader } from "@/components/screen";
 import { useAccount } from "@/lib/use-account";
 
+/** `datetime-local` wants local wall-clock time, not an ISO instant. */
+function toLocalInputValue(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}`
+  );
+}
+
 /** Ride flow, step B — Request a ride. */
 export default function Page() {
   const router = useRouter();
@@ -16,6 +25,18 @@ export default function Page() {
 
   const [booking, setBooking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pickupTime, setPickupTime] = useState("");
+
+  // Computed after mount: the server's clock would differ from the browser's
+  // and cause a hydration mismatch.
+  const [earliest, setEarliest] = useState("");
+  useEffect(() => {
+    setEarliest(toLocalInputValue(new Date(Date.now() + 15 * 60 * 1000)));
+  }, []);
+
+  const scheduling = when === "schedule";
+  const scheduledFor = pickupTime ? new Date(pickupTime) : null;
+  const scheduleReady = !scheduling || (scheduledFor !== null && !Number.isNaN(scheduledFor.getTime()));
 
   // Seed the pickup from the saved address once, leaving later edits alone.
   const [seeded, setSeeded] = useState(false);
@@ -49,7 +70,8 @@ export default function Page() {
           pickupAddress: pickup,
           dropoffAddress: dropoff,
           note: notes || undefined,
-          scheduled: when === "schedule",
+          // Epoch milliseconds, which is what the provider's scheduling takes.
+          pickupTime: scheduling && scheduledFor ? scheduledFor.getTime() : undefined,
         }),
       });
 
@@ -117,6 +139,29 @@ export default function Page() {
         </div>
       </div>
 
+      {scheduling ? (
+        <div className="big-field">
+          <label htmlFor="pickup-time">Pickup date and time</label>
+          <input
+            id="pickup-time"
+            className="big-input"
+            type="datetime-local"
+            value={pickupTime}
+            min={earliest || undefined}
+            onChange={(event) => setPickupTime(event.target.value)}
+          />
+          <p className="text-muted" style={{ fontSize: 13, margin: "8px 0 0" }}>
+            {scheduledFor && !Number.isNaN(scheduledFor.getTime())
+              ? `Pickup ${scheduledFor.toLocaleString(undefined, {
+                  weekday: "long",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}. A driver is assigned closer to the time.`
+              : "Choose at least 15 minutes from now."}
+          </p>
+        </div>
+      ) : null}
+
       <div className="big-field">
         <label htmlFor="notes">Notes (optional)</label>
         <textarea
@@ -137,10 +182,10 @@ export default function Page() {
       <button
         className="big-btn big-btn-primary"
         type="button"
-        disabled={pickup.trim() === "" || dropoff.trim() === "" || booking}
+        disabled={pickup.trim() === "" || dropoff.trim() === "" || !scheduleReady || booking}
         onClick={book}
       >
-        {booking ? "Requesting…" : "Request Ride"}
+        {booking ? "Requesting…" : scheduling ? "Schedule Ride" : "Request Ride"}
       </button>
     </Screen>
   );

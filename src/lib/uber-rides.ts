@@ -151,6 +151,8 @@ export type TripRequest = {
   productId: string;
   fareId?: string;
   noteForDriver?: string;
+  /** Epoch milliseconds. Present only for a scheduled pickup. */
+  pickupTimeMs?: number;
 };
 
 /**
@@ -247,6 +249,9 @@ export async function createGuestTrip(
       product_id: request.productId,
       fare_id: request.fareId,
       note_for_driver: request.noteForDriver,
+      scheduling: request.pickupTimeMs
+        ? { pickup_time: request.pickupTimeMs }
+        : undefined,
     }),
     cache: "no-store",
   });
