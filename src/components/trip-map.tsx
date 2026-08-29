@@ -3,13 +3,54 @@
 type Point = { latitude: number; longitude: number };
 
 /**
- * Schematic route map. Positions are the real coordinates, projected into a
- * fixed viewport — but there is no street data behind it, so it shows relative
- * positions and progress rather than an actual road route.
+ * Route map over OpenStreetMap tiles — real roads and buildings, no API key
+ * and no mapping library.
  *
- * Drawn inline so the app needs no tile provider, no maps key, and no extra
- * dependency. Swap for a real map later without changing the caller.
+ * Tiles are plain <img> elements laid out by Web Mercator maths and anchored
+ * to the container's centre, so the component needs no width measurement and
+ * works at any screen size. The map is deliberately not pannable: this is a
+ * status view, not an explorer.
+ *
+ * Note: tile.openstreetmap.org is fine for development and a small pilot, but
+ * the OSMF usage policy rules out heavy or commercial traffic. Move to a paid
+ * tile provider (or your own cache) before this carries real load — only the
+ * TILE_URL below needs to change.
  */
+
+const TILE_SIZE = 256;
+const MIN_ZOOM = 10;
+const MAX_ZOOM = 17;
+
+/** Tiles either side of centre. 5 across × 3 down covers ~1280×768 px. */
+const SPAN_X = 2;
+const SPAN_Y = 1;
+
+const TILE_URL = (z: number, x: number, y: number) =>
+  `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
+
+/** Fractional tile coordinates — the whole-number part is the tile, the rest the offset. */
+function project(point: Point, zoom: number): { x: number; y: number } {
+  const n = 2 ** zoom;
+  const lat = (point.latitude * Math.PI) / 180;
+  return {
+    x: ((point.longitude + 180) / 360) * n,
+    y: ((1 - Math.log(Math.tan(lat) + 1 / Math.cos(lat)) / Math.PI) / 2) * n,
+  };
+}
+
+/** Largest zoom at which every point still fits inside the visible box. */
+function fitZoom(points: Point[], boxWidth: number, boxHeight: number): number {
+  for (let zoom = MAX_ZOOM; zoom > MIN_ZOOM; zoom--) {
+    const projected = points.map((point) => project(point, zoom));
+    const xs = projected.map((p) => p.x);
+    const ys = projected.map((p) => p.y);
+    const width = (Math.max(...xs) - Math.min(...xs)) * TILE_SIZE;
+    const height = (Math.max(...ys) - Math.min(...ys)) * TILE_SIZE;
+    if (width <= boxWidth && height <= boxHeight) return zoom;
+  }
+  return MIN_ZOOM;
+}
+
 export function TripMap({
   pickup,
   dropoff,
@@ -19,107 +60,180 @@ export function TripMap({
   dropoff: Point;
   driver?: Point;
 }) {
-  const width = 340;
-  const height = 190;
-  const pad = 34;
-
+  const height = 220;
   const points = [pickup, dropoff, ...(driver ? [driver] : [])];
-  const lats = points.map((p) => p.latitude);
-  const lngs = points.map((p) => p.longitude);
 
-  // Pad the bounds so markers never sit on the frame edge, and guard the
-  // degenerate case where every point shares a coordinate.
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
-  const spanLat = Math.max(maxLat - minLat, 0.0025);
-  const spanLng = Math.max(maxLng - minLng, 0.0025);
+  const zoom = fitZoom(points, 250, height - 80);
+  const centre: Point = {
+    latitude: (Math.min(...points.map((p) => p.latitude)) + Math.max(...points.map((p) => p.latitude))) / 2,
+    longitude: (Math.min(...points.map((p) => p.longitude)) + Math.max(...points.map((p) => p.longitude))) / 2,
+  };
 
-  function project(point: Point): { x: number; y: number } {
-    const x = pad + ((point.longitude - minLng) / spanLng) * (width - pad * 2);
-    // Latitude increases northward, which is up the screen.
-    const y = height - pad - ((point.latitude - minLat) / spanLat) * (height - pad * 2);
-    return { x, y };
+  const centreTile = project(centre, zoom);
+
+  /** Pixel offset of a point from the container's centre. */
+  function offset(point: Point): { dx: number; dy: number } {
+    const projected = project(point, zoom);
+    return {
+      dx: (projected.x - centreTile.x) * TILE_SIZE,
+      dy: (projected.y - centreTile.y) * TILE_SIZE,
+    };
   }
 
-  const from = project(pickup);
-  const to = project(dropoff);
-  const car = driver ? project(driver) : null;
+  const originTile = { x: Math.floor(centreTile.x), y: Math.floor(centreTile.y) };
+  const tiles: Array<{ key: string; url: string; dx: number; dy: number }> = [];
+
+  for (let ix = -SPAN_X; ix <= SPAN_X; ix++) {
+    for (let iy = -SPAN_Y; iy <= SPAN_Y; iy++) {
+      const tileX = originTile.x + ix;
+      const tileY = originTile.y + iy;
+      const limit = 2 ** zoom;
+      if (tileY < 0 || tileY >= limit) continue;
+      // Wrap horizontally so the map still renders across the date line.
+      const wrappedX = ((tileX % limit) + limit) % limit;
+
+      tiles.push({
+        key: `${tileX}-${tileY}`,
+        url: TILE_URL(zoom, wrappedX, tileY),
+        dx: (tileX - centreTile.x) * TILE_SIZE,
+        dy: (tileY - centreTile.y) * TILE_SIZE,
+      });
+    }
+  }
+
+  const from = offset(pickup);
+  const to = offset(dropoff);
+  const car = driver ? offset(driver) : null;
+
+  const marker = (dx: number, dy: number): React.CSSProperties => ({
+    position: "absolute",
+    left: "50%",
+    top: "50%",
+    transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`,
+  });
 
   return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      width="100%"
+    <div
       role="img"
       aria-label={
         driver
-          ? "Schematic map showing pickup, destination and the driver's position"
-          : "Schematic map showing pickup and destination"
+          ? "Map showing pickup, destination and the driver's position"
+          : "Map showing pickup and destination"
       }
       style={{
-        display: "block",
+        position: "relative",
+        height,
         borderRadius: 24,
-        background: "var(--color-neutral-200)",
+        overflow: "hidden",
         border: "1px solid var(--color-divider)",
+        background: "var(--color-neutral-200)",
       }}
     >
-      <defs>
-        <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse">
-          <path
-            d="M28 0H0V28"
-            fill="none"
-            stroke="var(--color-neutral-300)"
-            strokeWidth="1"
-          />
-        </pattern>
-      </defs>
-      <rect width={width} height={height} fill="url(#grid)" />
+      {tiles.map((tile) => (
+        // eslint-disable-next-line @next/next/no-img-element -- remote tiles, no optimisation wanted
+        <img
+          key={tile.key}
+          src={tile.url}
+          alt=""
+          width={TILE_SIZE}
+          height={TILE_SIZE}
+          // The map is the top of the screen, so lazy loading only delays it.
+          loading="eager"
+          style={{
+            position: "absolute",
+            left: "50%",
+            top: "50%",
+            transform: `translate(${tile.dx}px, ${tile.dy}px)`,
+            // Warms the tiles toward the app's palette without hiding detail.
+            filter: "saturate(0.75) contrast(0.95)",
+          }}
+        />
+      ))}
 
-      <line
-        x1={from.x}
-        y1={from.y}
-        x2={to.x}
-        y2={to.y}
-        stroke="var(--color-accent)"
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeDasharray="1 9"
-        opacity="0.55"
-      />
+      {/* Straight line between the two ends — not a driven route. */}
+      <svg
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
+        aria-hidden="true"
+      >
+        <line
+          x1={`calc(50% + ${from.dx}px)`}
+          y1={`calc(50% + ${from.dy}px)`}
+          x2={`calc(50% + ${to.dx}px)`}
+          y2={`calc(50% + ${to.dy}px)`}
+          stroke="var(--color-accent)"
+          strokeWidth="4"
+          strokeLinecap="round"
+          strokeDasharray="1 10"
+          opacity="0.9"
+        />
+      </svg>
 
       {/* Pickup — hollow ring. */}
-      <circle cx={from.x} cy={from.y} r="9" fill="var(--color-bg)" stroke="var(--color-accent-700)" strokeWidth="3" />
-      <text
-        x={from.x}
-        y={from.y - 16}
-        textAnchor="middle"
-        fontSize="11"
-        fontFamily="var(--font-body)"
-        fill="var(--color-text)"
-      >
-        Pickup
-      </text>
+      <div
+        style={{
+          ...marker(from.dx, from.dy),
+          width: 20,
+          height: 20,
+          borderRadius: "50%",
+          background: "var(--color-bg)",
+          border: "4px solid var(--color-accent-700)",
+          boxShadow: "var(--shadow-sm)",
+        }}
+      />
 
       {/* Destination — solid. */}
-      <circle cx={to.x} cy={to.y} r="9" fill="var(--color-accent-2-600)" />
-      <text
-        x={to.x}
-        y={to.y + 24}
-        textAnchor="middle"
-        fontSize="11"
-        fontFamily="var(--font-body)"
-        fill="var(--color-text)"
-      >
-        Destination
-      </text>
+      <div
+        style={{
+          ...marker(to.dx, to.dy),
+          width: 20,
+          height: 20,
+          borderRadius: "50%",
+          background: "var(--color-accent-2-600)",
+          border: "3px solid var(--color-bg)",
+          boxShadow: "var(--shadow-sm)",
+        }}
+      />
 
       {car ? (
-        <g>
-          <circle cx={car.x} cy={car.y} r="15" fill="var(--color-accent)" opacity="0.18" />
-          <circle cx={car.x} cy={car.y} r="8" fill="var(--color-accent)" stroke="var(--color-bg)" strokeWidth="2.5" />
-        </g>
+        <div
+          style={{
+            ...marker(car.dx, car.dy),
+            width: 34,
+            height: 34,
+            borderRadius: "50%",
+            background: "color-mix(in srgb, var(--color-accent) 30%, transparent)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <span
+            style={{
+              width: 18,
+              height: 18,
+              borderRadius: "50%",
+              background: "var(--color-accent)",
+              border: "3px solid var(--color-bg)",
+              boxShadow: "var(--shadow-md)",
+            }}
+          />
+        </div>
       ) : null}
-    </svg>
+
+      <span
+        style={{
+          position: "absolute",
+          right: 0,
+          bottom: 0,
+          padding: "2px 7px",
+          fontSize: 10,
+          color: "var(--color-neutral-800)",
+          background: "color-mix(in srgb, var(--color-bg) 82%, transparent)",
+          borderTopLeftRadius: 8,
+        }}
+      >
+        © OpenStreetMap
+      </span>
+    </div>
   );
 }
