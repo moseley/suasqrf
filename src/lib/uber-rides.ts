@@ -177,12 +177,14 @@ export type Trip = {
   status: TripStatus;
   etaMinutes?: number;
   driver?: { name: string; phoneNumber?: string; rating?: number };
-  vehicle?: { make?: string; model?: string; licensePlate?: string };
+  vehicle?: { make?: string; model?: string; licensePlate?: string; color?: string };
   /** Echoed back so a status screen can draw the route without re-sending it. */
   pickup?: LatLng;
   dropoff?: LatLng;
   /** Present only while a driver is assigned and moving. */
   driverLocation?: { latitude: number; longitude: number };
+  /** Driving geometry for the map. Absent means fall back to a straight line. */
+  route?: LatLng[];
 };
 
 type TripResponse = {
@@ -190,7 +192,12 @@ type TripResponse = {
   status: TripStatus;
   estimate_info?: { eta?: number };
   driver?: { name: string; phone_number?: string; rating?: number } | null;
-  vehicle?: { make?: string; model?: string; license_plate?: string } | null;
+  vehicle?: {
+    make?: string;
+    model?: string;
+    license_plate?: string;
+    vehicle_color_name?: string;
+  } | null;
 };
 
 function toTrip(body: TripResponse, route?: { pickup: LatLng; dropoff: LatLng }): Trip {
@@ -212,6 +219,7 @@ function toTrip(body: TripResponse, route?: { pickup: LatLng; dropoff: LatLng })
           make: body.vehicle.make,
           model: body.vehicle.model,
           licensePlate: body.vehicle.license_plate,
+          color: body.vehicle.vehicle_color_name,
         }
       : undefined,
   };

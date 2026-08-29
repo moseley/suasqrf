@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { LatLng, Trip, TripRequest, TripStatus } from "./uber-rides";
+import { getRoute, pointAlong } from "./route";
 
 /**
  * A local stand-in for Guest Rides, for use while the guests.trips scope is
@@ -39,15 +40,17 @@ type MockTrip = {
   dropoff: LatLng;
   driverName: string;
   driverPhone: string;
-  vehicle: { make: string; model: string; licensePlate: string };
+  vehicle: { make: string; model: string; licensePlate: string; color: string };
+  /** Driving geometry, fetched once at booking. Null when routing failed. */
+  route: LatLng[] | null;
 };
 
 const trips = new Map<string, MockTrip>();
 
 const DRIVERS = [
-  { name: "Dana W.", phone: "+14155550188", make: "Toyota", model: "Prius", plate: "7XKD432" },
-  { name: "Luis R.", phone: "+14155550149", make: "Honda", model: "Accord", plate: "8ABC211" },
-  { name: "Priya N.", phone: "+14155550170", make: "Ford", model: "Escape", plate: "6TRW905" },
+  { name: "Dana W.", phone: "+14155550188", make: "Toyota", model: "Prius", plate: "7XKD432", color: "Silver" },
+  { name: "Luis R.", phone: "+14155550149", make: "Honda", model: "Accord", plate: "8ABC211", color: "Black" },
+  { name: "Priya N.", phone: "+14155550170", make: "Ford", model: "Escape", plate: "6TRW905", color: "Blue" },
 ];
 
 function elapsedSeconds(trip: MockTrip): number {
@@ -88,6 +91,8 @@ function driverLocationFor(trip: MockTrip, status: TripStatus): LatLng | undefin
 
   if (status === "in_progress") {
     const t = clamp01((elapsed - ARRIVED_AT) / (COMPLETED_AT - ARRIVED_AT));
+    // Follow the driving geometry so the car stays on the roads.
+    if (trip.route) return pointAlong(trip.route, t);
     return {
       latitude: lerp(trip.pickup.latitude, trip.dropoff.latitude, t),
       longitude: lerp(trip.pickup.longitude, trip.dropoff.longitude, t),
@@ -116,6 +121,7 @@ function toTrip(trip: MockTrip): Trip {
         : undefined,
     pickup: trip.pickup,
     dropoff: trip.dropoff,
+    route: trip.route ?? undefined,
     driverLocation: driverLocationFor(trip, status),
     driver: assigned
       ? { name: trip.driverName, phoneNumber: trip.driverPhone, rating: 4.9 }
@@ -125,12 +131,13 @@ function toTrip(trip: MockTrip): Trip {
           make: trip.vehicle.make,
           model: trip.vehicle.model,
           licensePlate: trip.vehicle.licensePlate,
+          color: trip.vehicle.color,
         }
       : undefined,
   };
 }
 
-export function createMockTrip(request: TripRequest): Trip {
+export async function createMockTrip(request: TripRequest): Promise<Trip> {
   const driver = DRIVERS[trips.size % DRIVERS.length];
   const trip: MockTrip = {
     requestId: `mock-${Math.random().toString(36).slice(2, 10)}`,
@@ -139,7 +146,14 @@ export function createMockTrip(request: TripRequest): Trip {
     dropoff: request.dropoff,
     driverName: driver.name,
     driverPhone: driver.phone,
-    vehicle: { make: driver.make, model: driver.model, licensePlate: driver.plate },
+    vehicle: {
+      make: driver.make,
+      model: driver.model,
+      licensePlate: driver.plate,
+      color: driver.color,
+    },
+    // Looked up once here rather than on every poll.
+    route: await getRoute(request.pickup, request.dropoff),
   };
   trips.set(trip.requestId, trip);
   return toTrip(trip);

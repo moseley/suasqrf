@@ -85,7 +85,7 @@ export async function POST(request: Request) {
   // Local stand-in while guests.trips approval is pending. Same shapes, so
   // turning it off is the only change needed once the real scope lands.
   if (!config) {
-    const trip = createMockTrip({
+    const trip = await createMockTrip({
       guest: riderDetails,
       pickup,
       dropoff,

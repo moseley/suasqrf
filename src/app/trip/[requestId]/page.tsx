@@ -93,41 +93,55 @@ export default function Page({ params }: PageProps<"/trip/[requestId]">) {
       </div>
 
       {trip.pickup && trip.dropoff ? (
-        <TripMap pickup={trip.pickup} dropoff={trip.dropoff} driver={trip.driverLocation} />
+        <TripMap
+          pickup={trip.pickup}
+          dropoff={trip.dropoff}
+          driver={trip.driverLocation}
+          route={trip.route}
+        />
       ) : null}
 
       {trip.driver ? (
-        <div className="card elev-sm" style={{ gap: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <div
-              className="icon-circle"
-              style={{
-                background: "var(--color-accent-2-100)",
-                fontFamily: "var(--font-heading)",
-                fontSize: 20,
-                color: "var(--color-accent-2-700)",
-              }}
-            >
-              {trip.driver.name.charAt(0)}
-            </div>
-            <div style={{ flex: 1 }}>
-              <h4 style={{ margin: 0 }}>{trip.driver.name}</h4>
-            </div>
+        <div className="card elev-sm" style={{ gap: 16, alignItems: "center", padding: "var(--space-4)" }}>
+          <div
+            className="icon-circle"
+            style={{
+              width: 60,
+              height: 60,
+              background: "var(--color-accent-2-100)",
+              fontFamily: "var(--font-heading)",
+              fontSize: 24,
+              color: "var(--color-accent-2-700)",
+            }}
+          >
+            {trip.driver.name.charAt(0)}
           </div>
+          <h4 style={{ margin: 0 }}>{trip.driver.name}</h4>
 
           {/* Sized to be read at a glance as a car pulls up. */}
           {trip.vehicle ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 20, lineHeight: 1.2 }}>
-                {[trip.vehicle.make, trip.vehicle.model].filter(Boolean).join(" ")}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 6,
+                textAlign: "center",
+              }}
+            >
+              <span style={{ fontSize: 21, lineHeight: 1.25 }}>
+                {[trip.vehicle.color, trip.vehicle.make, trip.vehicle.model]
+                  .filter(Boolean)
+                  .join(" ")}
               </span>
               {trip.vehicle.licensePlate ? (
                 <span
                   style={{
-                    fontFamily: "var(--font-heading)",
-                    fontSize: 28,
+                    fontFamily: "var(--font-body)",
+                    fontWeight: 700,
+                    fontSize: 30,
                     lineHeight: 1.15,
-                    letterSpacing: "0.02em",
+                    letterSpacing: "0.03em",
                   }}
                 >
                   {trip.vehicle.licensePlate}

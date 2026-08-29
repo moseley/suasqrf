@@ -55,13 +55,17 @@ export function TripMap({
   pickup,
   dropoff,
   driver,
+  route,
 }: {
   pickup: Point;
   dropoff: Point;
   driver?: Point;
+  route?: Point[];
 }) {
   const height = 220;
-  const points = [pickup, dropoff, ...(driver ? [driver] : [])];
+  // The route is what has to fit; sampling it keeps the zoom maths cheap.
+  const routeSample = route?.filter((_, index) => index % 12 === 0) ?? [];
+  const points = [pickup, dropoff, ...(driver ? [driver] : []), ...routeSample];
 
   const zoom = fitZoom(points, 250, height - 80);
   const centre: Point = {
@@ -150,22 +154,51 @@ export function TripMap({
         />
       ))}
 
-      {/* Straight line between the two ends — not a driven route. */}
+      {/* The driving route, or a straight line when routing was unavailable. */}
       <svg
         style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
         aria-hidden="true"
       >
-        <line
-          x1={`calc(50% + ${from.dx}px)`}
-          y1={`calc(50% + ${from.dy}px)`}
-          x2={`calc(50% + ${to.dx}px)`}
-          y2={`calc(50% + ${to.dy}px)`}
-          stroke="var(--color-accent)"
-          strokeWidth="4"
-          strokeLinecap="round"
-          strokeDasharray="1 10"
-          opacity="0.9"
-        />
+        {route && route.length > 1 ? (
+          <g style={{ transform: "translate(50%, 50%)" }}>
+            {/* Casing underneath so the line reads over any map colour. */}
+            <polyline
+              points={route.map((point) => {
+                const { dx, dy } = offset(point);
+                return `${dx},${dy}`;
+              }).join(" ")}
+              fill="none"
+              stroke="var(--color-bg)"
+              strokeWidth="8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity="0.85"
+            />
+            <polyline
+              points={route.map((point) => {
+                const { dx, dy } = offset(point);
+                return `${dx},${dy}`;
+              }).join(" ")}
+              fill="none"
+              stroke="var(--color-accent)"
+              strokeWidth="4.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </g>
+        ) : (
+          <line
+            x1={`calc(50% + ${from.dx}px)`}
+            y1={`calc(50% + ${from.dy}px)`}
+            x2={`calc(50% + ${to.dx}px)`}
+            y2={`calc(50% + ${to.dy}px)`}
+            stroke="var(--color-accent)"
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeDasharray="1 10"
+            opacity="0.9"
+          />
+        )}
       </svg>
 
       {/* Pickup — hollow ring. */}
