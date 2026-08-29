@@ -77,7 +77,6 @@ export default function Page({ params }: PageProps<"/trip/[requestId]">) {
   }
 
   const state = present(trip.status);
-  const canCall = Boolean(trip.driver?.phoneNumber);
 
   return (
     <Screen>
@@ -112,31 +111,28 @@ export default function Page({ params }: PageProps<"/trip/[requestId]">) {
               {trip.driver.name.charAt(0)}
             </div>
             <div style={{ flex: 1 }}>
-              <h4 style={{ margin: "0 0 2px" }}>{trip.driver.name}</h4>
-              <p className="text-muted" style={{ fontSize: 13, margin: 0 }}>
-                {[trip.vehicle?.make, trip.vehicle?.model].filter(Boolean).join(" ")}
-                {trip.vehicle?.licensePlate ? ` · ${trip.vehicle.licensePlate}` : ""}
-              </p>
+              <h4 style={{ margin: 0 }}>{trip.driver.name}</h4>
             </div>
           </div>
 
-          {/* Contact options appear only when a reachable number exists. */}
-          {canCall ? (
-            <div style={{ display: "flex", gap: 10 }}>
-              <a
-                className="big-btn big-btn-secondary"
-                href={`tel:${trip.driver.phoneNumber}`}
-                style={{ flex: 1, fontSize: 16, minHeight: 52 }}
-              >
-                Call
-              </a>
-              <a
-                className="big-btn big-btn-secondary"
-                href={`sms:${trip.driver.phoneNumber}`}
-                style={{ flex: 1, fontSize: 16, minHeight: 52 }}
-              >
-                Message
-              </a>
+          {/* Sized to be read at a glance as a car pulls up. */}
+          {trip.vehicle ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 20, lineHeight: 1.2 }}>
+                {[trip.vehicle.make, trip.vehicle.model].filter(Boolean).join(" ")}
+              </span>
+              {trip.vehicle.licensePlate ? (
+                <span
+                  style={{
+                    fontFamily: "var(--font-heading)",
+                    fontSize: 28,
+                    lineHeight: 1.15,
+                    letterSpacing: "0.02em",
+                  }}
+                >
+                  {trip.vehicle.licensePlate}
+                </span>
+              ) : null}
             </div>
           ) : null}
         </div>
