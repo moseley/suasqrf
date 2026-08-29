@@ -6,6 +6,7 @@ import {
   getRidesConfig,
   type LatLng,
 } from "@/lib/uber-rides";
+import { createMockTrip, getMockTrip, isMockEnabled } from "@/lib/uber-rides-mock";
 
 /**
  * Books a guest trip, and reports one back.
@@ -23,7 +24,7 @@ function isLatLng(value: unknown): value is LatLng {
 
 export async function POST(request: Request) {
   const config = getRidesConfig();
-  if (!config) {
+  if (!config && !isMockEnabled()) {
     return NextResponse.json(
       { configured: false, reason: "Uber Guest Rides credentials are not set." },
       { status: 503 },
@@ -57,6 +58,26 @@ export async function POST(request: Request) {
     );
   }
 
+  const riderDetails = {
+    firstName: rider.firstName,
+    lastName: typeof rider.lastName === "string" ? rider.lastName : "",
+    phoneNumber: rider.phoneNumber,
+    email: typeof rider.email === "string" ? rider.email : undefined,
+  };
+
+  // Local stand-in while guests.trips approval is pending. Same shapes, so
+  // turning it off is the only change needed once the real scope lands.
+  if (!config) {
+    const trip = createMockTrip({
+      guest: riderDetails,
+      pickup,
+      dropoff,
+      productId: "mock-uberx",
+      noteForDriver: typeof note === "string" ? note : undefined,
+    });
+    return NextResponse.json({ configured: true, sandbox: true, mock: true, ...trip });
+  }
+
   try {
     // Without a product the estimate picks one, which also yields the fare_id
     // that locks the upfront price.
@@ -76,12 +97,7 @@ export async function POST(request: Request) {
     }
 
     const trip = await createGuestTrip(config, {
-      guest: {
-        firstName: rider.firstName,
-        lastName: typeof rider.lastName === "string" ? rider.lastName : "",
-        phoneNumber: rider.phoneNumber,
-        email: typeof rider.email === "string" ? rider.email : undefined,
-      },
+      guest: riderDetails,
       pickup,
       dropoff,
       productId: chosenProduct,
@@ -99,7 +115,7 @@ export async function POST(request: Request) {
 /** GET /api/rides?requestId=... — the current recorded state of a trip. */
 export async function GET(request: Request) {
   const config = getRidesConfig();
-  if (!config) {
+  if (!config && !isMockEnabled()) {
     return NextResponse.json(
       { configured: false, reason: "Uber Guest Rides credentials are not set." },
       { status: 503 },
@@ -109,6 +125,12 @@ export async function GET(request: Request) {
   const requestId = new URL(request.url).searchParams.get("requestId");
   if (!requestId) {
     return NextResponse.json({ error: "requestId is required." }, { status: 400 });
+  }
+
+  if (!config) {
+    const trip = getMockTrip(requestId);
+    if (!trip) return NextResponse.json({ error: "Unknown trip." }, { status: 404 });
+    return NextResponse.json({ configured: true, sandbox: true, mock: true, ...trip });
   }
 
   try {
