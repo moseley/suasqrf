@@ -178,6 +178,11 @@ export type Trip = {
   etaMinutes?: number;
   driver?: { name: string; phoneNumber?: string; rating?: number };
   vehicle?: { make?: string; model?: string; licensePlate?: string };
+  /** Echoed back so a status screen can draw the route without re-sending it. */
+  pickup?: LatLng;
+  dropoff?: LatLng;
+  /** Present only while a driver is assigned and moving. */
+  driverLocation?: { latitude: number; longitude: number };
 };
 
 type TripResponse = {
@@ -188,11 +193,13 @@ type TripResponse = {
   vehicle?: { make?: string; model?: string; license_plate?: string } | null;
 };
 
-function toTrip(body: TripResponse): Trip {
+function toTrip(body: TripResponse, route?: { pickup: LatLng; dropoff: LatLng }): Trip {
   return {
     requestId: body.request_id,
     status: body.status,
     etaMinutes: body.estimate_info?.eta,
+    pickup: route?.pickup,
+    dropoff: route?.dropoff,
     driver: body.driver
       ? {
           name: body.driver.name,
@@ -240,7 +247,10 @@ export async function createGuestTrip(
     throw new Error(`Uber trip request failed: ${response.status} ${await response.text()}`);
   }
 
-  return toTrip((await response.json()) as TripResponse);
+  return toTrip((await response.json()) as TripResponse, {
+    pickup: request.pickup,
+    dropoff: request.dropoff,
+  });
 }
 
 export async function getGuestTrip(config: RidesConfig, requestId: string): Promise<Trip> {

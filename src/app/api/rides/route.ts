@@ -7,6 +7,7 @@ import {
   type LatLng,
 } from "@/lib/uber-rides";
 import { createMockTrip, getMockTrip, isMockEnabled } from "@/lib/uber-rides-mock";
+import { geocode } from "@/lib/geocode";
 
 /**
  * Books a guest trip, and reports one back.
@@ -20,6 +21,13 @@ function isLatLng(value: unknown): value is LatLng {
   if (!value || typeof value !== "object") return false;
   const point = value as Record<string, unknown>;
   return typeof point.latitude === "number" && typeof point.longitude === "number";
+}
+
+/** Coordinates win when both are supplied; otherwise the address is geocoded. */
+async function resolve(point: unknown, address: unknown): Promise<LatLng | null> {
+  if (isLatLng(point)) return point;
+  if (typeof address !== "string" || address.trim() === "") return null;
+  return geocode(address);
 }
 
 export async function POST(request: Request) {
@@ -38,14 +46,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const { guest, pickup, dropoff, productId, fareId, note } = (payload ?? {}) as Record<
-    string,
-    unknown
-  >;
+  const { guest, productId, fareId, note } = (payload ?? {}) as Record<string, unknown>;
+  const body = (payload ?? {}) as Record<string, unknown>;
 
-  if (!isLatLng(pickup) || !isLatLng(dropoff)) {
+  // Callers may send coordinates directly, or plain addresses to resolve here.
+  // Geocoding stays server-side so the UI never needs a maps key.
+  const pickup = await resolve(body.pickup, body.pickupAddress);
+  if (!pickup) {
     return NextResponse.json(
-      { error: "pickup and dropoff each need a latitude and longitude." },
+      { error: "Could not resolve the pickup location.", field: "pickup" },
+      { status: 400 },
+    );
+  }
+
+  const dropoff = await resolve(body.dropoff, body.dropoffAddress);
+  if (!dropoff) {
+    return NextResponse.json(
+      { error: "Could not resolve the destination.", field: "dropoff" },
       { status: 400 },
     );
   }

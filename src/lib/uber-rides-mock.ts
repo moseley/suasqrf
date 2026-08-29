@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { Trip, TripRequest, TripStatus } from "./uber-rides";
+import type { LatLng, Trip, TripRequest, TripStatus } from "./uber-rides";
 
 /**
  * A local stand-in for Guest Rides, for use while the guests.trips scope is
@@ -26,11 +26,17 @@ const TIMELINE: Array<{ at: number; status: TripStatus }> = [
   { at: 75, status: "completed" },
 ];
 
+const ACCEPTED_AT = 8;
+const ARRIVED_AT = 32;
+const COMPLETED_AT = 75;
+
 type MockTrip = {
   requestId: string;
   bookedAt: number;
   /** Set by the sandbox control route; freezes the trip at this state. */
   pinned?: TripStatus;
+  pickup: LatLng;
+  dropoff: LatLng;
   driverName: string;
   driverPhone: string;
   vehicle: { make: string; model: string; licensePlate: string };
@@ -44,9 +50,13 @@ const DRIVERS = [
   { name: "Priya N.", phone: "+14155550170", make: "Ford", model: "Escape", plate: "6TRW905" },
 ];
 
+function elapsedSeconds(trip: MockTrip): number {
+  return (Date.now() - trip.bookedAt) / 1000;
+}
+
 function statusFor(trip: MockTrip): TripStatus {
   if (trip.pinned) return trip.pinned;
-  const elapsed = (Date.now() - trip.bookedAt) / 1000;
+  const elapsed = elapsedSeconds(trip);
   let current: TripStatus = "processing";
   for (const step of TIMELINE) {
     if (elapsed >= step.at) current = step.status;
@@ -54,15 +64,59 @@ function statusFor(trip: MockTrip): TripStatus {
   return current;
 }
 
+function lerp(from: number, to: number, t: number): number {
+  return from + (to - from) * t;
+}
+
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
+/**
+ * Approach leg: the driver starts a little away from pickup and closes in.
+ * Trip leg: pickup to dropoff. Positions are interpolated from the clock, so
+ * a pinned trip holds its position too.
+ */
+function driverLocationFor(trip: MockTrip, status: TripStatus): LatLng | undefined {
+  if (!["accepted", "arriving", "in_progress"].includes(status)) return undefined;
+
+  const origin = {
+    latitude: trip.pickup.latitude + 0.012,
+    longitude: trip.pickup.longitude - 0.014,
+  };
+  const elapsed = elapsedSeconds(trip);
+
+  if (status === "in_progress") {
+    const t = clamp01((elapsed - ARRIVED_AT) / (COMPLETED_AT - ARRIVED_AT));
+    return {
+      latitude: lerp(trip.pickup.latitude, trip.dropoff.latitude, t),
+      longitude: lerp(trip.pickup.longitude, trip.dropoff.longitude, t),
+    };
+  }
+
+  const t = clamp01((elapsed - ACCEPTED_AT) / (ARRIVED_AT - ACCEPTED_AT));
+  return {
+    latitude: lerp(origin.latitude, trip.pickup.latitude, t),
+    longitude: lerp(origin.longitude, trip.pickup.longitude, t),
+  };
+}
+
 /** Driver and vehicle only exist once someone has actually accepted. */
 function toTrip(trip: MockTrip): Trip {
   const status = statusFor(trip);
   const assigned = ["accepted", "arriving", "in_progress", "completed"].includes(status);
+  const elapsed = elapsedSeconds(trip);
 
   return {
     requestId: trip.requestId,
     status,
-    etaMinutes: status === "processing" ? undefined : 4,
+    etaMinutes:
+      status === "accepted" || status === "arriving"
+        ? Math.max(1, Math.ceil((ARRIVED_AT - elapsed) / 60) + 3)
+        : undefined,
+    pickup: trip.pickup,
+    dropoff: trip.dropoff,
+    driverLocation: driverLocationFor(trip, status),
     driver: assigned
       ? { name: trip.driverName, phoneNumber: trip.driverPhone, rating: 4.9 }
       : undefined,
@@ -76,11 +130,13 @@ function toTrip(trip: MockTrip): Trip {
   };
 }
 
-export function createMockTrip(_request: TripRequest): Trip {
+export function createMockTrip(request: TripRequest): Trip {
   const driver = DRIVERS[trips.size % DRIVERS.length];
   const trip: MockTrip = {
     requestId: `mock-${Math.random().toString(36).slice(2, 10)}`,
     bookedAt: Date.now(),
+    pickup: request.pickup,
+    dropoff: request.dropoff,
     driverName: driver.name,
     driverPhone: driver.phone,
     vehicle: { make: driver.make, model: driver.model, licensePlate: driver.plate },

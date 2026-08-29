@@ -14,6 +14,9 @@ export default function Page() {
   const [when, setWhen] = useState<"now" | "schedule">("now");
   const [notes, setNotes] = useState("");
 
+  const [booking, setBooking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   // Seed the pickup from the saved address once, leaving later edits alone.
   const [seeded, setSeeded] = useState(false);
   useEffect(() => {
@@ -22,6 +25,48 @@ export default function Page() {
       setSeeded(true);
     }
   }, [account, seeded]);
+
+  /**
+   * Addresses go to the server as text; it geocodes them, so no maps key is
+   * needed here. On success we hand off to the live status screen.
+   */
+  async function book() {
+    setBooking(true);
+    setError(null);
+
+    const [firstName, ...rest] = (account?.name ?? "Veteran").split(" ");
+
+    try {
+      const response = await fetch("/api/rides", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          guest: {
+            firstName,
+            lastName: rest.join(" "),
+            phoneNumber: account?.phone ?? "+15555555555",
+          },
+          pickupAddress: pickup,
+          dropoffAddress: dropoff,
+          note: notes || undefined,
+          scheduled: when === "schedule",
+        }),
+      });
+
+      const body = await response.json();
+
+      if (!response.ok) {
+        setError(body.reason ?? body.error ?? "Could not request the ride.");
+        return;
+      }
+
+      router.push(`/trip/${encodeURIComponent(body.requestId)}`);
+    } catch {
+      setError("Could not reach the server. Check your connection and try again.");
+    } finally {
+      setBooking(false);
+    }
+  }
 
   return (
     <Screen>
@@ -83,19 +128,19 @@ export default function Page() {
         />
       </div>
 
+      {error ? (
+        <p style={{ fontSize: 14, color: "var(--color-accent-700)", margin: 0 }}>{error}</p>
+      ) : null}
+
       <div className="grow" />
 
       <button
         className="big-btn big-btn-primary"
         type="button"
-        disabled={pickup.trim() === "" || dropoff.trim() === ""}
-        onClick={() =>
-          router.push(
-            `/confirmation/ride?pickup=${encodeURIComponent(pickup)}&dropoff=${encodeURIComponent(dropoff)}`,
-          )
-        }
+        disabled={pickup.trim() === "" || dropoff.trim() === "" || booking}
+        onClick={book}
       >
-        Request Ride
+        {booking ? "Requesting…" : "Request Ride"}
       </button>
     </Screen>
   );
