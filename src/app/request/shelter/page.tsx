@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Screen, ScreenHeader } from "@/components/screen";
 import { Check } from "@/components/icons";
 import { useAccount } from "@/lib/use-account";
@@ -34,12 +34,24 @@ export default function Page() {
 
   const [stage, setStage] = useState<Stage>("form");
   const [busy, setBusy] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [radiusMiles, setRadiusMiles] = useState(25);
   const [liveData, setLiveData] = useState(true);
   const [booking, setBooking] = useState<Booking | null>(null);
+
+  // Default to the address on file. Device location is an override, not a
+  // dependency — it is refused often enough that a shelter request must not
+  // rest on it.
+  const [seeded, setSeeded] = useState(false);
+  useEffect(() => {
+    if (!seeded && account?.homeAddress) {
+      setLocation(account.homeAddress);
+      setSeeded(true);
+    }
+  }, [account, seeded]);
 
   function requestWithoutRoom(note?: string) {
     const params = new URLSearchParams({ location: location || "Current location", people });
@@ -54,7 +66,14 @@ export default function Page() {
       return;
     }
 
-    setBusy(true);
+    // Geolocation is refused outright off HTTPS, with a bare permission error
+    // that would otherwise look like the veteran declined.
+    if (!window.isSecureContext) {
+      setError("Location needs a secure (https) connection. Type an address instead.");
+      return;
+    }
+
+    setLocating(true);
     setError(null);
 
     navigator.geolocation.getCurrentPosition(
@@ -63,14 +82,22 @@ export default function Page() {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
         });
-        setLocation("Current location");
-        setBusy(false);
+        setLocation("");
+        setLocating(false);
       },
-      () => {
-        setError("Could not read your location. Type an address instead.");
-        setBusy(false);
+      (failure) => {
+        // Each cause needs different advice; one message for all three leaves
+        // someone retrying a button that will never work.
+        setError(
+          failure.code === failure.PERMISSION_DENIED
+            ? "Location is blocked for this site. Allow it in your browser settings, or type an address."
+            : failure.code === failure.TIMEOUT
+              ? "Finding your location took too long. Try again, or type an address."
+              : "Your location is unavailable right now. Type an address instead.",
+        );
+        setLocating(false);
       },
-      { enableHighAccuracy: true, timeout: 10000 },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
     );
   }
 
@@ -285,26 +312,47 @@ export default function Page() {
 
       <div className="big-field">
         <label htmlFor="location">Current location</label>
-        <input
-          id="location"
-          className="big-input"
-          value={location}
-          onChange={(event) => {
-            setLocation(event.target.value);
-            // Typing replaces the fix from the device.
-            setCoords(null);
-          }}
-          placeholder="Cross streets or address"
-        />
-        <button
-          className="btn btn-ghost"
-          type="button"
-          style={{ marginTop: 8, fontSize: 15 }}
-          disabled={busy}
-          onClick={useCurrentLocation}
-        >
-          Use my current location
-        </button>
+
+        {coords ? (
+          <div
+            className="card elev-sm"
+            style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
+          >
+            <Check size={20} color="var(--color-accent-2-700)" />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 16 }}>Using your current location</div>
+              <div className="text-muted" style={{ fontSize: 13 }}>
+                {coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}
+              </div>
+            </div>
+            <button
+              className="btn btn-ghost"
+              type="button"
+              onClick={() => setCoords(null)}
+            >
+              Change
+            </button>
+          </div>
+        ) : (
+          <>
+            <input
+              id="location"
+              className="big-input"
+              value={location}
+              onChange={(event) => setLocation(event.target.value)}
+              placeholder="Cross streets or address"
+            />
+            <button
+              className="btn btn-ghost"
+              type="button"
+              style={{ marginTop: 8, fontSize: 15 }}
+              disabled={locating}
+              onClick={useCurrentLocation}
+            >
+              {locating ? "Finding you…" : "Use my current location"}
+            </button>
+          </>
+        )}
       </div>
 
       <div className="big-field">
