@@ -1,36 +1,66 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# S.U.A.S. Q.R.F.
 
-## Getting Started
+Veteran support coordination — a ride, a meal, or a safe place to stay.
 
-First, run the development server:
+A mobile-first Next.js app built from the *Veterans assistance app design specs*
+canvas. It coordinates the shortest path between a veteran's need and a real
+service: a ride from a driver or a fellow veteran, a meal, or a hotel room for
+tonight.
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install && npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then open http://localhost:3000. Copy `.env.example` to `.env.local` first if
+you want to connect any real service — everything runs without credentials, on
+labelled sample data.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Sign in with **555-555-5555** for the demo account (Marcus Reyes, with a saved
+home address), or connect the SUAS API for real passwordless sign-in.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Screens
 
-## Learn More
+| Route | What it does |
+|---|---|
+| `/` | Register or sign in |
+| `/home` | Choose a ride, a meal, or emergency shelter |
+| `/profile` | Contact details, home address, allergies |
+| `/request/ride` | Pickup, destination type-ahead, veteran-driver option |
+| `/trip/[requestId]` | Live status, map, driver and vehicle |
+| `/request/meal` | Delivery address and allergies |
+| `/request/shelter` | Location, party size, nearby rooms, booking |
 
-To learn more about Next.js, take a look at the following resources:
+## External services
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Every integration is built against the real API shapes and falls back to a
+labelled stand-in when its credentials are absent, so the whole app is usable
+before anything is connected.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+**[docs/INTEGRATIONS.md](docs/INTEGRATIONS.md)** lists every service, what it
+needs to go live, and what it does until then. In short: Veterans To Veterans is
+live; Uber Direct and Amadeus are self-serve whenever you want them; Uber Guest
+Rides and Vouchers are waiting on Uber approval; Yelp is the only one that costs
+money.
 
-## Deploy on Vercel
+## How it holds together
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **Nothing is claimed that is not recorded.** A status label only appears when
+  the fact behind it exists — no driver is shown before one accepts, and
+  contact options appear only when a reachable number does. This follows
+  `MVP_REFERENCE.md` §7.2 in the SUAS specs.
+- **Credentials stay server-side.** Every client module is `server-only` and is
+  reached through a route under `src/app/api/`.
+- **Trips carry their own state.** A trip id encodes what is needed to rebuild
+  it, so a poll landing on a different serverless instance still resolves.
+- **Built for the audience.** Large type, 44px-plus targets, and short paths —
+  a request is meant to be a few taps under stress.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Known gaps
+
+The app does not yet meet the SUAS specifications it is named for. Most
+significantly there are no Consent Grants, registration is self-service where
+the specs mark it `FUTURE`, and location is disclosed to third-party geocoders
+without a recorded basis. Treat this as a working prototype rather than the
+pilot build.
