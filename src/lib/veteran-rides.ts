@@ -54,6 +54,14 @@ function zipFrom(address: string | undefined): string | undefined {
   return address?.match(/\b(\d{5})(?:-\d{4})?\b/)?.[1];
 }
 
+/** The ZIP travels in its own field, so it is not repeated in the address. */
+function addressWithoutZip(address: string | undefined): string {
+  return (address ?? "")
+    .replace(/\b\d{5}(?:-\d{4})?\b/, "")
+    .replace(/[\s,]+$/, "")
+    .trim();
+}
+
 /**
  * The API reports a match and a booking state but issues no id of its own and
  * exposes no read endpoint, so the trip is held here against the
@@ -113,11 +121,11 @@ export async function createTrip(request: TripRequest): Promise<Trip> {
         phone: request.guest.phoneNumber,
       },
       currentAddress: {
-        address: request.pickup.address ?? "",
+        address: addressWithoutZip(request.pickup.address),
         ...(zipFrom(request.pickup.address) ? { zipCode: zipFrom(request.pickup.address) } : {}),
       },
       destinationAddress: {
-        address: request.dropoff.address ?? "",
+        address: addressWithoutZip(request.dropoff.address),
         ...(zipFrom(request.dropoff.address) ? { zipCode: zipFrom(request.dropoff.address) } : {}),
       },
       durationMinutes: DEFAULT_DURATION_MINUTES,
