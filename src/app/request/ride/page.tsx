@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { Screen, ScreenHeader } from "@/components/screen";
 import { Check } from "@/components/icons";
 import { AddressField, type Coords } from "@/components/address-field";
@@ -18,6 +18,13 @@ function RideForm() {
   const [pickup, setPickup] = useState("");
   const [pickupCoords, setPickupCoords] = useState<Coords | null>(null);
   const [dropoff, setDropoff] = useState("");
+  const [dropoffCoords, setDropoffCoords] = useState<Coords | null>(null);
+
+  // Type-ahead ranks by distance from wherever the veteran is being collected.
+  const near = useMemo(
+    () => ({ coords: pickupCoords, address: pickup }),
+    [pickupCoords, pickup],
+  );
   const [veteranDriver, setVeteranDriver] = useState(false);
 
   const [booking, setBooking] = useState(false);
@@ -68,6 +75,7 @@ function RideForm() {
           pickupAddress: pickup,
           ...(pickupCoords ? { pickup: pickupCoords } : {}),
           dropoffAddress: dropoff,
+          ...(dropoffCoords ? { dropoff: dropoffCoords } : {}),
           veteranDriver,
         }),
       });
@@ -103,16 +111,18 @@ function RideForm() {
         }}
       />
 
-      <div className="big-field">
-        <label htmlFor="dropoff">Where are you going?</label>
-        <input
-          id="dropoff"
-          className="big-input"
-          value={dropoff}
-          onChange={(event) => setDropoff(event.target.value)}
-          placeholder="Destination"
-        />
-      </div>
+      <AddressField
+        id="dropoff"
+        label="Where are you going?"
+        value={dropoff}
+        onChange={(next, coords) => {
+          setDropoff(next);
+          setDropoffCoords(coords);
+        }}
+        placeholder="Place name or address"
+        allowCurrentLocation={false}
+        suggestNear={near}
+      />
 
       <label className="big-check">
         <input

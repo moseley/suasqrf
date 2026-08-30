@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export type Coords = { latitude: number; longitude: number };
 
@@ -14,6 +14,14 @@ export type Coords = { latitude: number; longitude: number };
  *
  * Shared by the ride, meal and shelter forms so all three behave the same.
  */
+type Suggestion = {
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  distanceMiles: number;
+};
+
 export function AddressField({
   id,
   label,
@@ -22,6 +30,8 @@ export function AddressField({
   placeholder = "Street address",
   invalid = false,
   errorText,
+  allowCurrentLocation = true,
+  suggestNear,
 }: {
   id: string;
   label: string;
@@ -31,9 +41,65 @@ export function AddressField({
   placeholder?: string;
   invalid?: boolean;
   errorText?: string;
+  allowCurrentLocation?: boolean;
+  /** Enables type-ahead, ranked by distance from this point or address. */
+  suggestNear?: { coords?: Coords | null; address?: string } | null;
 }) {
   const [locating, setLocating] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  // Suppressed right after a pick, so choosing does not immediately re-search
+  // the text it just inserted.
+  const skipNextSearch = useRef(false);
+
+  useEffect(() => {
+    if (!suggestNear) return;
+    if (skipNextSearch.current) {
+      skipNextSearch.current = false;
+      return;
+    }
+    if (value.trim().length < 3) {
+      setSuggestions([]);
+      return;
+    }
+
+    // Debounced: the geocoder asks for at most one request a second.
+    const timer = setTimeout(async () => {
+      const params = new URLSearchParams({ q: value.trim() });
+      if (suggestNear.coords) {
+        params.set("lat", String(suggestNear.coords.latitude));
+        params.set("lng", String(suggestNear.coords.longitude));
+      } else if (suggestNear.address) {
+        params.set("near", suggestNear.address);
+      } else {
+        return;
+      }
+
+      setSearching(true);
+      try {
+        const response = await fetch(`/api/places?${params}`);
+        const body = await response.json();
+        setSuggestions(Array.isArray(body.places) ? body.places : []);
+      } catch {
+        setSuggestions([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [value, suggestNear]);
+
+  function choose(suggestion: Suggestion) {
+    skipNextSearch.current = true;
+    setSuggestions([]);
+    onChange(suggestion.address, {
+      latitude: suggestion.latitude,
+      longitude: suggestion.longitude,
+    });
+  }
 
   function useCurrentLocation() {
     if (!("geolocation" in navigator)) {
@@ -109,15 +175,36 @@ export function AddressField({
         aria-invalid={invalid}
         style={invalid ? { borderColor: "var(--color-danger)" } : undefined}
       />
-      <button
-        className="btn btn-ghost"
-        type="button"
-        style={{ marginTop: 8, fontSize: 15 }}
-        disabled={locating}
-        onClick={useCurrentLocation}
-      >
-        {locating ? "Finding you…" : "Use my current location"}
-      </button>
+      {suggestions.length > 0 ? (
+        <ul className="suggest-list">
+          {suggestions.map((suggestion) => (
+            <li key={`${suggestion.latitude},${suggestion.longitude}`}>
+              <button type="button" className="suggest-item" onClick={() => choose(suggestion)}>
+                <span className="suggest-name">{suggestion.name}</span>
+                <span className="suggest-meta">
+                  {suggestion.distanceMiles} mi · {suggestion.address}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : searching && value.trim().length >= 3 ? (
+        <p className="text-muted" style={{ fontSize: 13, margin: "8px 0 0" }}>
+          Searching…
+        </p>
+      ) : null}
+
+      {allowCurrentLocation ? (
+        <button
+          className="btn btn-ghost"
+          type="button"
+          style={{ marginTop: 8, fontSize: 15 }}
+          disabled={locating}
+          onClick={useCurrentLocation}
+        >
+          {locating ? "Finding you…" : "Use my current location"}
+        </button>
+      ) : null}
 
       {geoError ? (
         <p style={{ fontSize: 14, color: "var(--color-accent-700)", margin: "8px 0 0" }}>

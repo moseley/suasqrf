@@ -120,3 +120,92 @@ export async function reverseGeocode(
     return null;
   }
 }
+
+export type PlaceMatch = {
+  /** Short name, e.g. "Kaiser Permanente Mountain View". */
+  name: string;
+  /** Full address for the field once chosen. */
+  address: string;
+  latitude: number;
+  longitude: number;
+  distanceMiles: number;
+};
+
+/** Great-circle miles between two points. */
+function milesBetween(a: Point, b: { latitude: number; longitude: number }): number {
+  const R = 3958.8;
+  const dLat = ((b.latitude - a.latitude) * Math.PI) / 180;
+  const dLng = ((b.longitude - a.longitude) * Math.PI) / 180;
+  const lat1 = (a.latitude * Math.PI) / 180;
+  const lat2 = (b.latitude * Math.PI) / 180;
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * Places matching a name, nearest to a point first.
+ *
+ * Uses Photon, which is built for type-ahead over the same OpenStreetMap data
+ * and takes a location bias — Nominatim ranks by prominence and matches whole
+ * names, so "Kaiser" there returns a landmark three counties away before the
+ * branch down the road.
+ *
+ * Free and keyless, with the same caveat as the tile and routing services: fine
+ * for development and a pilot, not for real load.
+ */
+const PHOTON_ENDPOINT = "https://photon.komoot.io/api";
+
+/** A destination is somewhere a driver can drop someone, not a landform. */
+const NOT_DESTINATIONS = new Set(["waterway", "natural", "landuse", "boundary", "place"]);
+
+export async function searchNear(
+  query: string,
+  origin: Point,
+  limit = 6,
+): Promise<PlaceMatch[]> {
+  if (query.trim().length < 3) return [];
+
+  try {
+    const url =
+      `${PHOTON_ENDPOINT}?q=${encodeURIComponent(query)}` +
+      `&lat=${origin.latitude}&lon=${origin.longitude}&limit=25&lang=en`;
+
+    const response = await fetch(url, {
+      headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!response.ok) return [];
+
+    const body = (await response.json()) as {
+      features?: Array<{
+        geometry?: { coordinates?: [number, number] };
+        properties?: Record<string, string>;
+      }>;
+    };
+
+    return (body.features ?? [])
+      .filter((feature) => !NOT_DESTINATIONS.has(feature.properties?.osm_key ?? ""))
+      .map((feature) => {
+        const [longitude, latitude] = feature.geometry?.coordinates ?? [NaN, NaN];
+        const parts = feature.properties ?? {};
+        const street = [parts.housenumber, parts.street].filter(Boolean).join(" ");
+
+        return {
+          name: parts.name || street || query,
+          address:
+            [street, parts.city, parts.state, parts.postcode].filter(Boolean).join(", ") || "",
+          latitude,
+          longitude,
+          distanceMiles: Number(milesBetween(origin, { latitude, longitude }).toFixed(1)),
+        };
+      })
+      .filter((match) => Number.isFinite(match.latitude) && match.address !== "")
+      // Photon biases by distance but still weighs importance; sort outright so
+      // the closest branch is always first.
+      .sort((a, b) => a.distanceMiles - b.distanceMiles)
+      .slice(0, limit);
+  } catch {
+    return [];
+  }
+}
