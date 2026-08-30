@@ -174,19 +174,6 @@ img { display: block; max-width: 100%; }
 }
 .chip-on:hover { background: var(--color-accent-600); border-color: var(--color-accent-600); }
 
-/* Address source buttons — read clearly as tappable buttons, highlight the
-   active choice. */
-.addr-opts { display: flex; gap: 12px; }
-.addr-opt {
-  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  min-height: 56px; padding: 12px 14px; text-align: center; cursor: pointer;
-  font-family: var(--font-heading); font-weight: var(--font-heading-weight); font-size: 16px;
-  color: var(--color-text); background: var(--color-surface);
-  border: 2px solid var(--color-divider); border-radius: 18px;
-}
-.addr-opt:not(:disabled):hover { border-color: var(--color-accent); }
-.addr-opt:disabled { opacity: 0.55; cursor: default; }
-.addr-opt-on { border-color: var(--color-accent); background: var(--color-accent-100); }
 
 /* — cards — */
 .card {

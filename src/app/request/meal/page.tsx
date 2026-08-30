@@ -4,12 +4,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Screen, ScreenHeader } from "@/components/screen";
 import { ChipGroup } from "@/components/chips";
-import { Check, Home as HomeIcon } from "@/components/icons";
+import { Check } from "@/components/icons";
 import { useAccount } from "@/lib/use-account";
 import { ALLERGENS } from "@/lib/meal-options";
 import { nextPhoneValue, phoneDigits } from "@/lib/phone";
 
-type Coords = { latitude: number; longitude: number };
 
 /** Meal flow, step B — Request a meal delivery. Prefills from the profile. */
 export default function Page() {
@@ -17,9 +16,6 @@ export default function Page() {
   const { account } = useAccount();
 
   const [address, setAddress] = useState("");
-  const [coords, setCoords] = useState<Coords | null>(null);
-  const [locating, setLocating] = useState(false);
-  const [geoError, setGeoError] = useState<string | null>(null);
 
   // Allergies stay tucked away until the veteran opts in, so the common
   // request is short.
@@ -44,48 +40,6 @@ export default function Page() {
     setSeeded(true);
   }, [account, seeded]);
 
-  const usingHome =
-    !coords && address !== "" && address === account?.homeAddress;
-
-  function chooseHome() {
-    setGeoError(null);
-    setCoords(null);
-    setAddress(account?.homeAddress ?? "");
-  }
-
-  /** Asks the browser where the veteran is, mirroring the shelter screen. */
-  function useCurrentLocation() {
-    if (!("geolocation" in navigator)) {
-      setGeoError("This device cannot share a location. Type an address instead.");
-      return;
-    }
-    if (!window.isSecureContext) {
-      setGeoError("Location needs a secure (https) connection. Type an address instead.");
-      return;
-    }
-
-    setLocating(true);
-    setGeoError(null);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setCoords({ latitude: position.coords.latitude, longitude: position.coords.longitude });
-        setAddress("");
-        setLocating(false);
-      },
-      (failure) => {
-        setGeoError(
-          failure.code === failure.PERMISSION_DENIED
-            ? "Location is blocked for this site. Allow it in your browser settings, or type an address."
-            : failure.code === failure.TIMEOUT
-              ? "Finding your location took too long. Try again, or type an address."
-              : "Your location is unavailable right now. Type an address instead.",
-        );
-        setLocating(false);
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
-    );
-  }
-
   function toggleAllergy(option: string) {
     setAllergies((current) =>
       current.includes(option)
@@ -105,14 +59,14 @@ export default function Page() {
   // a field has been touched, so the prefilled defaults never nag on load.
   const [addressTouched, setAddressTouched] = useState(false);
   const [phoneTouched, setPhoneTouched] = useState(false);
-  const hasAddress = coords !== null || address.trim() !== "";
+  const hasAddress = address.trim() !== "";
   const hasPhone = phoneDigits(phone).length === 10;
   const canSubmit = hasAddress && hasPhone;
   const addressError = addressTouched && !hasAddress;
   const phoneError = phoneTouched && !hasPhone;
 
   function submit() {
-    const deliveryAddress = coords ? "Current location" : address.trim();
+    const deliveryAddress = address.trim();
 
     const params = new URLSearchParams();
     params.set("address", deliveryAddress);
@@ -134,65 +88,21 @@ export default function Page() {
       <div className="big-field">
         <label>Delivery address</label>
 
-        <div className="addr-opts">
-          <button
-            type="button"
-            className={coords ? "addr-opt addr-opt-on" : "addr-opt"}
-            disabled={locating}
-            onClick={useCurrentLocation}
-            aria-pressed={coords !== null}
-          >
-            {locating ? "Finding you…" : "Current location"}
-          </button>
-          <button
-            type="button"
-            className={usingHome ? "addr-opt addr-opt-on" : "addr-opt"}
-            onClick={chooseHome}
-            aria-pressed={usingHome}
-          >
-            <HomeIcon size={18} />
-            Home of record
-          </button>
-        </div>
+        <input
+          id="address"
+          className="big-input"
+          value={address}
+          onChange={(event) => {
+            setAddress(event.target.value);
+            setAddressTouched(true);
+          }}
+          onBlur={() => setAddressTouched(true)}
+          placeholder="Street address"
+          aria-invalid={addressError}
+          style={addressError ? { borderColor: "var(--color-danger)" } : undefined}
+        />
 
-        {coords ? (
-          <div
-            className="card elev-sm"
-            style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 12 }}
-          >
-            <Check size={20} color="var(--color-accent-2-700)" />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 16 }}>Using your current location</div>
-              <div className="text-muted" style={{ fontSize: 13 }}>
-                {coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}
-              </div>
-            </div>
-            <button className="btn btn-ghost" type="button" onClick={() => setCoords(null)}>
-              Change
-            </button>
-          </div>
-        ) : (
-          <input
-            id="address"
-            className="big-input"
-            value={address}
-            onChange={(event) => {
-              setAddress(event.target.value);
-              setAddressTouched(true);
-              setGeoError(null);
-            }}
-            onBlur={() => setAddressTouched(true)}
-            placeholder="Or enter a delivery address"
-            aria-invalid={addressError}
-            style={{ marginTop: 12, ...(addressError ? { borderColor: "var(--color-danger)" } : {}) }}
-          />
-        )}
-
-        {geoError ? (
-          <p style={{ fontSize: 14, color: "var(--color-accent-700)", margin: "8px 0 0" }}>
-            {geoError}
-          </p>
-        ) : addressError ? (
+        {addressError ? (
           <p style={{ fontSize: 14, color: "var(--color-danger)", margin: "8px 0 0" }}>
             Enter a delivery address so we know where to send the meal.
           </p>
