@@ -327,7 +327,8 @@ textarea.big-input { min-height: 72px; resize: vertical; }
 .brand-mark {
   width: 44px; height: 44px; border-radius: 50%; flex: none;
   display: flex; align-items: center; justify-content: center;
-  background: var(--color-accent-100);
+  /* Ink on accent is 4.6:1; white would be 3.6:1 on the same ground. */
+  background: var(--color-accent);
 }
 .brand-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .brand-kicker { font-size: 10px; letter-spacing: 0.06em; align-self: flex-start; padding: 2px 8px; }

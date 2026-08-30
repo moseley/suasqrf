@@ -44,7 +44,7 @@ export function ScreenHeader({
 
       <div className="brand">
         <span className="brand-mark">
-          <ShieldCheck size={22} color="var(--color-accent-700)" />
+          <ShieldCheck size={22} color="var(--color-text)" />
         </span>
         <span className="brand-text">
           <span className="tag tag-outline brand-kicker">VETERAN SUPPORT</span>
