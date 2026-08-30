@@ -96,10 +96,15 @@ export default function Page() {
     );
   }
 
-  // Address and a complete phone number are both required.
+  // Address and a complete phone number are both required. Errors surface once
+  // a field has been touched, so the prefilled defaults never nag on load.
+  const [addressTouched, setAddressTouched] = useState(false);
+  const [phoneTouched, setPhoneTouched] = useState(false);
   const hasAddress = coords !== null || address.trim() !== "";
   const hasPhone = phoneDigits(phone).length === 10;
   const canSubmit = hasAddress && hasPhone;
+  const addressError = addressTouched && !hasAddress;
+  const phoneError = phoneTouched && !hasPhone;
 
   function submit() {
     const deliveryAddress = coords ? "Current location" : address.trim();
@@ -170,16 +175,23 @@ export default function Page() {
             value={address}
             onChange={(event) => {
               setAddress(event.target.value);
+              setAddressTouched(true);
               setGeoError(null);
             }}
+            onBlur={() => setAddressTouched(true)}
             placeholder="Or enter a delivery address"
-            style={{ marginTop: 12 }}
+            aria-invalid={addressError}
+            style={{ marginTop: 12, ...(addressError ? { borderColor: "var(--color-danger)" } : {}) }}
           />
         )}
 
         {geoError ? (
           <p style={{ fontSize: 14, color: "var(--color-accent-700)", margin: "8px 0 0" }}>
             {geoError}
+          </p>
+        ) : addressError ? (
+          <p style={{ fontSize: 14, color: "var(--color-danger)", margin: "8px 0 0" }}>
+            Enter a delivery address so we know where to send the meal.
           </p>
         ) : null}
       </div>
@@ -244,9 +256,22 @@ export default function Page() {
           type="tel"
           inputMode="tel"
           value={phone}
-          onChange={(event) => setPhone(nextPhoneValue(event.target.value, phone))}
+          onChange={(event) => {
+            setPhone(nextPhoneValue(event.target.value, phone));
+            setPhoneTouched(true);
+          }}
+          onBlur={() => setPhoneTouched(true)}
           placeholder="555-555-5555"
+          aria-invalid={phoneError}
+          style={phoneError ? { borderColor: "var(--color-danger)" } : undefined}
         />
+        {phoneError ? (
+          <p style={{ fontSize: 14, color: "var(--color-danger)", margin: "8px 0 0" }}>
+            {phone.trim() === ""
+              ? "Enter a phone number so the driver can reach you."
+              : "Enter a complete 10-digit phone number."}
+          </p>
+        ) : null}
       </div>
 
       <div className="big-field">
