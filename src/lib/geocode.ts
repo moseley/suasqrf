@@ -15,7 +15,13 @@ import "server-only";
 const ENDPOINT = "https://nominatim.openstreetmap.org/search";
 const USER_AGENT = "suasqrf/0.1 (veteran support coordination; contact via repo)";
 
-export type Point = { latitude: number; longitude: number; address: string };
+export type Point = {
+  latitude: number;
+  longitude: number;
+  address: string;
+  /** Captured here so callers needing a ZIP do not have to look it up again. */
+  postcode?: string;
+};
 
 /** Known addresses, so the common paths work offline and without rate limits. */
 const FIXTURES: Array<{ match: RegExp; latitude: number; longitude: number }> = [
@@ -49,7 +55,7 @@ export async function geocode(address: string): Promise<Point | null> {
   }
 
   try {
-    const url = `${ENDPOINT}?q=${encodeURIComponent(address)}&format=json&limit=1`;
+    const url = `${ENDPOINT}?q=${encodeURIComponent(address)}&format=json&limit=1&addressdetails=1`;
     const response = await fetch(url, {
       headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
       cache: "no-store",
@@ -57,13 +63,18 @@ export async function geocode(address: string): Promise<Point | null> {
 
     if (!response.ok) return null;
 
-    const body = (await response.json()) as Array<{ lat: string; lon: string }>;
+    const body = (await response.json()) as Array<{
+      lat: string;
+      lon: string;
+      address?: Record<string, string>;
+    }>;
     if (body.length === 0) return null;
 
     const point: Point = {
       latitude: Number.parseFloat(body[0].lat),
       longitude: Number.parseFloat(body[0].lon),
       address,
+      postcode: body[0].address?.postcode,
     };
     cache.set(key, point);
     return point;
@@ -74,19 +85,13 @@ export async function geocode(address: string): Promise<Point | null> {
 
 const REVERSE_ENDPOINT = "https://nominatim.openstreetmap.org/reverse";
 
-const reverseCache = new Map<string, string>();
+const reverseCache = new Map<string, Record<string, string>>();
 
-/**
- * Coordinates → a street address a person can read.
- *
- * A latitude and longitude tell a veteran nothing about whether we have the
- * right place, so any surface that takes a device fix shows this instead.
- * Returns null on failure; the caller keeps the coordinates either way.
- */
-export async function reverseGeocode(
+/** One reverse lookup, cached, shared by the formatters below. */
+async function reverseLookup(
   latitude: number,
   longitude: number,
-): Promise<string | null> {
+): Promise<Record<string, string> | null> {
   const key = `${latitude.toFixed(5)},${longitude.toFixed(5)}`;
   const cached = reverseCache.get(key);
   if (cached) return cached;
@@ -103,22 +108,54 @@ export async function reverseGeocode(
       display_name?: string;
       address?: Record<string, string>;
     };
+    const parts = { ...(body.address ?? {}) };
+    if (body.display_name) parts.__display = body.display_name;
 
-    const parts = body.address ?? {};
-    // Prefer a short postal-style line over Nominatim's very long display_name.
-    // A fix landing between buildings comes back as "1315;1317;1319" — take the
-    // first, which is a real address rather than a list a courier cannot use.
-    const houseNumber = parts.house_number?.split(";")[0]?.trim();
-    const street = [houseNumber, parts.road].filter(Boolean).join(" ");
-    const city = parts.city ?? parts.town ?? parts.village ?? parts.suburb;
-    const short = [street, city, parts.state, parts.postcode].filter(Boolean).join(", ");
-
-    const address = short || body.display_name || null;
-    if (address) reverseCache.set(key, address);
-    return address;
+    reverseCache.set(key, parts);
+    return parts;
   } catch {
     return null;
   }
+}
+
+/**
+ * The postal code at a point.
+ *
+ * The veteran ride service requires a ZIP on both addresses, and a typed place
+ * name or a type-ahead result often carries none — so it is derived from the
+ * coordinates rather than the text.
+ */
+export async function postcodeFor(
+  latitude: number,
+  longitude: number,
+): Promise<string | undefined> {
+  const parts = await reverseLookup(latitude, longitude);
+  return parts?.postcode;
+}
+
+/**
+ * Coordinates → a street address a person can read.
+ *
+ * A latitude and longitude tell a veteran nothing about whether we have the
+ * right place, so any surface that takes a device fix shows this instead.
+ * Returns null on failure; the caller keeps the coordinates either way.
+ */
+export async function reverseGeocode(
+  latitude: number,
+  longitude: number,
+): Promise<string | null> {
+  const parts = await reverseLookup(latitude, longitude);
+  if (!parts) return null;
+
+  // Prefer a short postal-style line over Nominatim's very long display_name.
+  // A fix landing between buildings comes back as "1315;1317;1319" — take the
+  // first, which is a real address rather than a list a courier cannot use.
+  const houseNumber = parts.house_number?.split(";")[0]?.trim();
+  const street = [houseNumber, parts.road].filter(Boolean).join(" ");
+  const city = parts.city ?? parts.town ?? parts.village ?? parts.suburb;
+  const short = [street, city, parts.state, parts.postcode].filter(Boolean).join(", ");
+
+  return short || parts.__display || null;
 }
 
 export type PlaceMatch = {

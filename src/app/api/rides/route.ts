@@ -108,10 +108,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ configured: true, ...trip });
     } catch (error) {
       console.error("Veteran ride request failed", error);
-      return NextResponse.json(
-        { error: "Could not reach the veteran driver service." },
-        { status: 502 },
-      );
+      const message =
+        error instanceof veteranRides.VeteranRideError
+          ? error.message
+          : "Could not reach the veteran driver service.";
+      return NextResponse.json({ error: message }, { status: 502 });
     }
   }
 

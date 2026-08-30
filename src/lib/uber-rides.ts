@@ -85,7 +85,13 @@ function headers(config: RidesConfig, token: string): HeadersInit {
   return result;
 }
 
-export type LatLng = { latitude: number; longitude: number; address?: string };
+export type LatLng = {
+  latitude: number;
+  longitude: number;
+  address?: string;
+  /** Set when a geocode supplied one; saves a second lookup downstream. */
+  postcode?: string;
+};
 
 export type ProductEstimate = {
   productId: string;

@@ -2,6 +2,7 @@ import "server-only";
 
 import { createMockProvider } from "./mock-trips";
 import { getRoute } from "./route";
+import { postcodeFor } from "./geocode";
 import type { Trip, TripRequest, TripStatus } from "./uber-rides";
 import {
   decodeTripPayload,
@@ -24,6 +25,9 @@ import {
  */
 
 export const PROVIDER_NAME = "Veterans To Veterans";
+
+/** Carries a message the service wrote, safe to show to a veteran. */
+export class VeteranRideError extends Error {}
 
 /** Ids are prefixed so a lookup can tell which provider owns a trip. */
 const PREFIX = "vrs";
@@ -71,6 +75,24 @@ function untag(requestId: string): string {
 /** US five-digit ZIP out of a free-text address, when there is one. */
 function zipFrom(address: string | undefined): string | undefined {
   return address?.match(/\b(\d{5})(?:-\d{4})?\b/)?.[1];
+}
+
+/**
+ * The service requires a ZIP on both addresses and rejects the request with a
+ * 400 without one. A typed place name or a type-ahead result often carries no
+ * postcode, so fall back to the coordinates we already hold.
+ */
+async function zipForPoint(point: {
+  latitude: number;
+  longitude: number;
+  address?: string;
+  postcode?: string;
+}): Promise<string | undefined> {
+  return (
+    zipFrom(point.address) ??
+    point.postcode ??
+    (await postcodeFor(point.latitude, point.longitude))
+  );
 }
 
 /** The ZIP travels in its own field, so it is not repeated in the address. */
@@ -140,6 +162,9 @@ export async function createTrip(request: TripRequest): Promise<Trip> {
   };
   if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
 
+  const pickupZip = await zipForPoint(request.pickup);
+  const dropoffZip = await zipForPoint(request.dropoff);
+
   const response = await fetch(`${config.apiUrl}/api/v1/ride-requests`, {
     method: "POST",
     headers,
@@ -151,11 +176,11 @@ export async function createTrip(request: TripRequest): Promise<Trip> {
       },
       currentAddress: {
         address: addressWithoutZip(request.pickup.address),
-        ...(zipFrom(request.pickup.address) ? { zipCode: zipFrom(request.pickup.address) } : {}),
+        ...(pickupZip ? { zipCode: pickupZip } : {}),
       },
       destinationAddress: {
         address: addressWithoutZip(request.dropoff.address),
-        ...(zipFrom(request.dropoff.address) ? { zipCode: zipFrom(request.dropoff.address) } : {}),
+        ...(dropoffZip ? { zipCode: dropoffZip } : {}),
       },
       durationMinutes: DEFAULT_DURATION_MINUTES,
       maxDistanceKm: DEFAULT_MAX_DISTANCE_KM,
@@ -165,7 +190,17 @@ export async function createTrip(request: TripRequest): Promise<Trip> {
   });
 
   if (!response.ok) {
-    throw new Error(`Veteran ride request failed: ${response.status} ${await response.text()}`);
+    // The service explains itself well — an unsupported ZIP, say — so carry
+    // its wording through rather than replacing it with a generic failure.
+    const detail = await response.text();
+    let message = `Veteran ride request failed: ${response.status}`;
+    try {
+      const body = JSON.parse(detail) as { error?: { message?: string } };
+      if (body.error?.message) message = body.error.message;
+    } catch {
+      // Non-JSON body; the status is all there is to report.
+    }
+    throw new VeteranRideError(message);
   }
 
   const body = (await response.json()) as RideResponse;
