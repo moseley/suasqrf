@@ -10,12 +10,8 @@ export type Account = {
   /** Prefills the ride pickup and meal delivery fields. */
   homeAddress?: string;
   // --- added by PRD-002 (Veteran Profile) ---
-  /** e.g. ["Peanuts", "Shellfish"]. Shown read-only on the meal request. */
+  /** e.g. ["Peanuts", "Shellfish"]. Prefills the meal allergy chips. */
   allergies?: string[];
-  /** e.g. ["Diabetic-friendly", "Halal"]. Prefills the meal dietary chips. */
-  dietaryRestrictions?: string[];
-  /** e.g. "Mediterranean". Prefills the meal cuisine chooser. */
-  cuisinePreference?: string;
   /** Always false in this phase — the VA connector is a placeholder. */
   vaConnected?: boolean;
   isMock: boolean;
@@ -30,8 +26,6 @@ export const MOCK_ACCOUNT: Account = {
   phone: MOCK_PHONE,
   homeAddress: "855 Maude Ave, Mountain View, CA 94043",
   allergies: ["Peanuts", "Shellfish"],
-  dietaryRestrictions: ["Diabetic-friendly"],
-  cuisinePreference: "Mediterranean",
   vaConnected: false,
   isMock: true,
 };

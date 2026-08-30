@@ -4,18 +4,6 @@
  * one-off request are always drawn from the same list.
  */
 
-/** Multi-select on both screens. */
-export const DIETARY_RESTRICTIONS = [
-  "Vegetarian",
-  "Vegan",
-  "Halal",
-  "Kosher",
-  "Gluten-free",
-  "Diabetic-friendly",
-  "Low-sodium",
-  "Dairy-free",
-] as const;
-
 /** Multi-select allergens (the FDA "big 9"). */
 export const ALLERGENS = [
   "Milk",
@@ -29,14 +17,3 @@ export const ALLERGENS = [
   "Sesame",
 ] as const;
 
-/** Single-select on both screens. */
-export const CUISINES = [
-  "American",
-  "Italian",
-  "Mexican",
-  "Chinese",
-  "Indian",
-  "Mediterranean",
-  "Soul food",
-  "Comfort food",
-] as const;
