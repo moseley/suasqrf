@@ -16,6 +16,19 @@ export const DIETARY_RESTRICTIONS = [
   "Dairy-free",
 ] as const;
 
+/** Multi-select allergens (the FDA "big 9"). */
+export const ALLERGENS = [
+  "Milk",
+  "Eggs",
+  "Fish",
+  "Shellfish",
+  "Tree nuts",
+  "Peanuts",
+  "Wheat",
+  "Soy",
+  "Sesame",
+] as const;
+
 /** Single-select on both screens. */
 export const CUISINES = [
   "American",

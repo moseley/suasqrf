@@ -7,7 +7,7 @@ import { ChipGroup } from "@/components/chips";
 import { ShieldCheck } from "@/components/icons";
 import { clearAccount, saveAccount, type Account } from "@/lib/account";
 import { useAccount } from "@/lib/use-account";
-import { CUISINES, DIETARY_RESTRICTIONS } from "@/lib/meal-options";
+import { ALLERGENS, CUISINES, DIETARY_RESTRICTIONS } from "@/lib/meal-options";
 import { nextPhoneValue } from "@/lib/phone";
 
 const SECTION_LABEL: React.CSSProperties = {
@@ -28,7 +28,7 @@ export default function Page() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [homeAddress, setHomeAddress] = useState("");
-  const [allergies, setAllergies] = useState("");
+  const [allergies, setAllergies] = useState<string[]>([]);
   const [diets, setDiets] = useState<string[]>([]);
   const [cuisine, setCuisine] = useState("");
 
@@ -41,43 +41,35 @@ export default function Page() {
     setPhone(account.phone ?? "");
     setEmail(account.email ?? "");
     setHomeAddress(account.homeAddress ?? "");
-    setAllergies(account.allergies ?? "");
+    setAllergies(account.allergies ?? []);
     setDiets(account.dietaryRestrictions ?? []);
     setCuisine(account.cuisinePreference ?? "");
     setSeeded(true);
   }, [account, seeded]);
 
-  // "Profile saved" holds until the next edit — any field change clears it,
-  // while save itself touches no field so the note survives.
-  const [justSaved, setJustSaved] = useState(false);
+  // Auto-save: every edit writes straight back to the account, merged onto the
+  // loaded one so fields this screen does not manage (isMock, vaConnected) are
+  // preserved. Runs only after seeding, so it never writes the empty shell over
+  // a stored account before it loads.
+  const [saved, setSaved] = useState(false);
   useEffect(() => {
-    setJustSaved(false);
-  }, [name, phone, email, homeAddress, allergies, diets, cuisine]);
-
-  function toggleDiet(option: string) {
-    setDiets((current) =>
-      current.includes(option)
-        ? current.filter((value) => value !== option)
-        : [...current, option],
-    );
-  }
-
-  function save() {
-    // Merge onto the loaded account so fields this screen does not manage
-    // (isMock, vaConnected) are preserved.
+    if (!seeded) return;
     const base: Account = account ?? { name: "", isMock: false };
-    const updated: Account = {
+    saveAccount({
       ...base,
       name: name.trim() || base.name,
       email: email.trim() || undefined,
       phone: phone.trim() || undefined,
       homeAddress: homeAddress.trim() || undefined,
-      allergies: allergies.trim() || undefined,
+      allergies,
       dietaryRestrictions: diets,
       cuisinePreference: cuisine || undefined,
-    };
-    saveAccount(updated);
-    setJustSaved(true);
+    });
+    setSaved(true);
+  }, [seeded, account, name, phone, email, homeAddress, allergies, diets, cuisine]);
+
+  function toggle(list: string[], setList: (next: string[]) => void, option: string) {
+    setList(list.includes(option) ? list.filter((value) => value !== option) : [...list, option]);
   }
 
   function signOut() {
@@ -148,13 +140,11 @@ export default function Page() {
       <p style={SECTION_LABEL}>Health &amp; dietary</p>
 
       <div className="big-field">
-        <label htmlFor="allergies">Allergies</label>
-        <input
-          id="allergies"
-          className="big-input"
-          value={allergies}
-          onChange={(event) => setAllergies(event.target.value)}
-          placeholder="e.g. Peanuts, shellfish"
+        <label>Allergies</label>
+        <ChipGroup
+          options={ALLERGENS}
+          isSelected={(option) => allergies.includes(option)}
+          onToggle={(option) => toggle(allergies, setAllergies, option)}
         />
       </div>
 
@@ -163,7 +153,7 @@ export default function Page() {
         <ChipGroup
           options={DIETARY_RESTRICTIONS}
           isSelected={(option) => diets.includes(option)}
-          onToggle={toggleDiet}
+          onToggle={(option) => toggle(diets, setDiets, option)}
         />
       </div>
 
@@ -202,22 +192,12 @@ export default function Page() {
 
       <div className="grow" />
 
-      {justSaved ? (
-        <p
-          style={{
-            fontSize: 14,
-            color: "var(--color-accent-2-700)",
-            textAlign: "center",
-            margin: 0,
-          }}
-        >
-          Profile saved.
-        </p>
-      ) : null}
-
-      <button className="big-btn big-btn-primary" type="button" onClick={save}>
-        Save profile
-      </button>
+      <p
+        className="text-muted"
+        style={{ fontSize: 14, textAlign: "center", margin: 0 }}
+      >
+        {saved ? "Changes are saved automatically." : "Your changes save as you make them."}
+      </p>
 
       <button
         className="btn btn-ghost"

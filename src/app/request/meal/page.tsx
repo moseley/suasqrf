@@ -7,7 +7,7 @@ import { ChipGroup } from "@/components/chips";
 import { Check, Home as HomeIcon } from "@/components/icons";
 import { useAccount } from "@/lib/use-account";
 import { CUISINES, DIETARY_RESTRICTIONS } from "@/lib/meal-options";
-import { nextPhoneValue } from "@/lib/phone";
+import { nextPhoneValue, phoneDigits } from "@/lib/phone";
 
 type Coords = { latitude: number; longitude: number };
 
@@ -20,10 +20,6 @@ export default function Page() {
   const [coords, setCoords] = useState<Coords | null>(null);
   const [locating, setLocating] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
-
-  const [whenMode, setWhenMode] = useState<"asap" | "schedule">("asap");
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("");
 
   // Allergies and preferences stay tucked away until the veteran opts in, so
   // the common request is short.
@@ -40,10 +36,11 @@ export default function Page() {
   const [seeded, setSeeded] = useState(false);
   useEffect(() => {
     if (seeded || !account) return;
+    if (account.homeAddress) setAddress(account.homeAddress);
     if (account.phone) setPhone(account.phone);
     if (account.dietaryRestrictions?.length) setDiets(account.dietaryRestrictions);
     if (account.cuisinePreference) setCuisine(account.cuisinePreference);
-    if (account.allergies || account.dietaryRestrictions?.length || account.cuisinePreference) {
+    if (account.allergies?.length || account.dietaryRestrictions?.length || account.cuisinePreference) {
       setHasDietary(true);
     }
     setSeeded(true);
@@ -99,19 +96,20 @@ export default function Page() {
     );
   }
 
-  const canSubmit = coords !== null || address.trim() !== "";
+  // Address and a complete phone number are both required.
+  const hasAddress = coords !== null || address.trim() !== "";
+  const hasPhone = phoneDigits(phone).length === 10;
+  const canSubmit = hasAddress && hasPhone;
 
   function submit() {
     const deliveryAddress = coords ? "Current location" : address.trim();
-    const when = whenMode === "schedule" && date && time ? `${date}T${time}` : "";
 
     const params = new URLSearchParams();
     params.set("address", deliveryAddress);
-    if (when) params.set("when", when);
     if (hasDietary) {
       if (diets.length) params.set("diet", diets.join(","));
       if (cuisine) params.set("cuisine", cuisine);
-      if (account?.allergies) params.set("allergies", account.allergies);
+      if (account?.allergies?.length) params.set("allergies", account.allergies.join(", "));
     }
     if (phone.trim()) params.set("phone", phone.trim());
     if (instructions.trim()) params.set("instructions", instructions.trim());
@@ -200,7 +198,7 @@ export default function Page() {
 
       {hasDietary ? (
         <>
-          {account?.allergies ? (
+          {account?.allergies?.length ? (
             <div className="card" style={{ background: "var(--color-accent-100)", gap: 2 }}>
               <span
                 style={{
@@ -211,7 +209,7 @@ export default function Page() {
               >
                 Allergies on file
               </span>
-              <span style={{ fontSize: 16 }}>{account.allergies}</span>
+              <span style={{ fontSize: 16 }}>{account.allergies.join(", ")}</span>
             </div>
           ) : null}
 
@@ -237,48 +235,6 @@ export default function Page() {
           </div>
         </>
       ) : null}
-
-      <div className="big-field">
-        <label>When should it arrive?</label>
-        <div className="seg" style={{ width: "100%" }}>
-          {(["asap", "schedule"] as const).map((mode) => (
-            <label
-              key={mode}
-              className="seg-opt"
-              style={{ flex: 1, justifyContent: "center", fontSize: 16, padding: "15px 12px" }}
-            >
-              <input
-                type="radio"
-                name="when"
-                checked={whenMode === mode}
-                onChange={() => setWhenMode(mode)}
-              />
-              {mode === "asap" ? "As soon as possible" : "Schedule"}
-            </label>
-          ))}
-        </div>
-
-        {whenMode === "schedule" ? (
-          <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
-            <input
-              aria-label="Delivery date"
-              className="big-input"
-              type="date"
-              value={date}
-              onChange={(event) => setDate(event.target.value)}
-              style={{ flex: 1 }}
-            />
-            <input
-              aria-label="Delivery time"
-              className="big-input"
-              type="time"
-              value={time}
-              onChange={(event) => setTime(event.target.value)}
-              style={{ flex: 1 }}
-            />
-          </div>
-        ) : null}
-      </div>
 
       <div className="big-field">
         <label htmlFor="phone">Delivery phone number</label>

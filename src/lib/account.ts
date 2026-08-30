@@ -10,8 +10,8 @@ export type Account = {
   /** Prefills the ride pickup and meal delivery fields. */
   homeAddress?: string;
   // --- added by PRD-002 (Veteran Profile) ---
-  /** Free text, e.g. "Peanuts, shellfish". Shown read-only on the meal request. */
-  allergies?: string;
+  /** e.g. ["Peanuts", "Shellfish"]. Shown read-only on the meal request. */
+  allergies?: string[];
   /** e.g. ["Diabetic-friendly", "Halal"]. Prefills the meal dietary chips. */
   dietaryRestrictions?: string[];
   /** e.g. "Mediterranean". Prefills the meal cuisine chooser. */
@@ -29,7 +29,7 @@ export const MOCK_ACCOUNT: Account = {
   email: "m.reyes@example.com",
   phone: MOCK_PHONE,
   homeAddress: "855 Maude Ave, Mountain View, CA 94043",
-  allergies: "Peanuts, shellfish",
+  allergies: ["Peanuts", "Shellfish"],
   dietaryRestrictions: ["Diabetic-friendly"],
   cuisinePreference: "Mediterranean",
   vaConnected: false,
@@ -58,7 +58,17 @@ export function loadAccount(): Account | null {
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return null;
     const candidate = parsed as Partial<Account>;
-    return typeof candidate.name === "string" ? (candidate as Account) : null;
+    if (typeof candidate.name !== "string") return null;
+    // Older accounts stored allergies as a comma-separated string; normalise to
+    // the list the app now uses so both shapes load without a crash.
+    const rawAllergies: unknown = (parsed as Record<string, unknown>).allergies;
+    if (typeof rawAllergies === "string") {
+      candidate.allergies = rawAllergies
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+    }
+    return candidate as Account;
   } catch {
     return null;
   }
