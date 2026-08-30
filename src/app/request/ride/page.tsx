@@ -9,38 +9,16 @@ import { useAccount } from "@/lib/use-account";
 /** Kept in step with PROVIDER_NAME in src/lib/veteran-rides.ts. */
 const VETERAN_SERVICE = "Veterans To Veterans";
 
-/** `datetime-local` wants local wall-clock time, not an ISO instant. */
-function toLocalInputValue(date: Date): string {
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return (
-    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
-    `T${pad(date.getHours())}:${pad(date.getMinutes())}`
-  );
-}
-
-/** Ride flow, step B — Request a ride. */
+/** Ride flow, step B — Request a ride. Pickup is always as soon as possible. */
 export default function Page() {
   const router = useRouter();
   const { account } = useAccount();
   const [pickup, setPickup] = useState("");
   const [dropoff, setDropoff] = useState("");
-  const [when, setWhen] = useState<"now" | "schedule">("now");
   const [veteranDriver, setVeteranDriver] = useState(false);
 
   const [booking, setBooking] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pickupTime, setPickupTime] = useState("");
-
-  // Computed after mount: the server's clock would differ from the browser's
-  // and cause a hydration mismatch.
-  const [earliest, setEarliest] = useState("");
-  useEffect(() => {
-    setEarliest(toLocalInputValue(new Date(Date.now() + 15 * 60 * 1000)));
-  }, []);
-
-  const scheduling = when === "schedule";
-  const scheduledFor = pickupTime ? new Date(pickupTime) : null;
-  const scheduleReady = !scheduling || (scheduledFor !== null && !Number.isNaN(scheduledFor.getTime()));
 
   // Seed the pickup from the saved address once, leaving later edits alone.
   const [seeded, setSeeded] = useState(false);
@@ -74,8 +52,6 @@ export default function Page() {
           pickupAddress: pickup,
           dropoffAddress: dropoff,
           veteranDriver,
-          // Epoch milliseconds, which is what the provider's scheduling takes.
-          pickupTime: scheduling && scheduledFor ? scheduledFor.getTime() : undefined,
         }),
       });
 
@@ -122,50 +98,6 @@ export default function Page() {
         />
       </div>
 
-      <div className="big-field">
-        <label>When</label>
-        <div className="seg" style={{ width: "100%", display: "flex" }}>
-          {(["now", "schedule"] as const).map((option) => (
-            <label
-              key={option}
-              className="seg-opt"
-              style={{ flex: 1, justifyContent: "center", padding: 12, fontSize: 15 }}
-            >
-              <input
-                type="radio"
-                name="when"
-                checked={when === option}
-                onChange={() => setWhen(option)}
-              />
-              {option === "now" ? "Now" : "Schedule"}
-            </label>
-          ))}
-        </div>
-      </div>
-
-      {scheduling ? (
-        <div className="big-field">
-          <label htmlFor="pickup-time">Pickup date and time</label>
-          <input
-            id="pickup-time"
-            className="big-input"
-            type="datetime-local"
-            value={pickupTime}
-            min={earliest || undefined}
-            onChange={(event) => setPickupTime(event.target.value)}
-          />
-          <p className="text-muted" style={{ fontSize: 13, margin: "8px 0 0" }}>
-            {scheduledFor && !Number.isNaN(scheduledFor.getTime())
-              ? `Pickup ${scheduledFor.toLocaleString(undefined, {
-                  weekday: "long",
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}. A driver is assigned closer to the time.`
-              : "Choose at least 15 minutes from now."}
-          </p>
-        </div>
-      ) : null}
-
       <label className="big-check">
         <input
           type="checkbox"
@@ -192,10 +124,10 @@ export default function Page() {
       <button
         className="big-btn big-btn-primary"
         type="button"
-        disabled={pickup.trim() === "" || dropoff.trim() === "" || !scheduleReady || booking}
+        disabled={pickup.trim() === "" || dropoff.trim() === "" || booking}
         onClick={book}
       >
-        {booking ? "Requesting…" : scheduling ? "Schedule Ride" : "Request Ride"}
+        {booking ? "Requesting…" : "Request Ride"}
       </button>
     </Screen>
   );
