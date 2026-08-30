@@ -65,18 +65,52 @@ export default function Page() {
   const addressError = addressTouched && !hasAddress;
   const phoneError = phoneTouched && !hasPhone;
 
-  function submit() {
-    const deliveryAddress = address.trim();
+  const [planning, setPlanning] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
 
-    const params = new URLSearchParams();
-    params.set("address", deliveryAddress);
-    if (hasDietary) {
-      if (allergies.length) params.set("allergies", allergies.join(", "));
+  /**
+   * The veteran does not choose: the server picks the nearest open kitchen and
+   * a standing meal that clears their allergies.
+   */
+  async function submit() {
+    setPlanning(true);
+    setPlanError(null);
+
+    try {
+      const response = await fetch("/api/meals/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          address: address.trim(),
+          allergies: hasDietary ? allergies : [],
+          name: account?.name,
+        }),
+      });
+      const body = await response.json();
+
+      if (!response.ok || !body.planned) {
+        setPlanError(body.reason ?? body.error ?? "Could not arrange a meal.");
+        return;
+      }
+
+      const params = new URLSearchParams();
+      params.set("address", address.trim());
+      params.set("restaurant", body.restaurant.name);
+      params.set("meal", body.meal.name);
+      if (body.restaurant.distanceMiles !== undefined) {
+        params.set("distance", String(body.restaurant.distanceMiles));
+      }
+      if (hasDietary && allergies.length) params.set("allergies", allergies.join(", "));
+      if (phone.trim()) params.set("phone", phone.trim());
+      if (instructions.trim()) params.set("instructions", instructions.trim());
+      if (!body.liveSearch) params.set("sample", "1");
+
+      router.push(`/confirmation/meal?${params}`);
+    } catch {
+      setPlanError("Could not reach the meal service. A caseworker can still help.");
+    } finally {
+      setPlanning(false);
     }
-    if (phone.trim()) params.set("phone", phone.trim());
-    if (instructions.trim()) params.set("instructions", instructions.trim());
-
-    router.push(`/confirmation/meal?${params}`);
   }
 
   return (
@@ -172,15 +206,19 @@ export default function Page() {
         />
       </div>
 
+      {planError ? (
+        <p style={{ fontSize: 14, color: "var(--color-danger)", margin: 0 }}>{planError}</p>
+      ) : null}
+
       <div className="grow" />
 
       <button
         className="big-btn big-btn-primary"
         type="button"
-        disabled={!canSubmit}
+        disabled={!canSubmit || planning}
         onClick={submit}
       >
-        Request Meal
+        {planning ? "Arranging…" : "Request Meal"}
       </button>
     </Screen>
   );

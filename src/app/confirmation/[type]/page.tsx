@@ -44,10 +44,10 @@ const FLOWS = {
     stroke: "var(--color-accent-2-700)",
     status: { label: "In progress", className: "tag tag-accent-2" },
     rows: (params: Record<string, string>) => [
+      ["Meal", params.meal],
+      ["Kitchen", params.distance ? `${params.restaurant} (${params.distance} mi)` : params.restaurant],
       ["Delivery to", params.address],
       ["When", formatWhen(params.when)],
-      ["Dietary", params.diet ? params.diet.split(",").join(", ") : ""],
-      ["Cuisine", params.cuisine],
       ["Allergies", params.allergies],
       ["Phone", params.phone],
       ["Instructions", params.instructions],
