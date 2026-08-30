@@ -1,23 +1,21 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAccount } from "@/lib/use-account";
 import { User } from "./icons";
 
-/** Header avatar. Opens the profile, where the veteran can edit or sign out. */
+/** Header avatar. Opens the profile, where sign out now lives as its own action. */
 export function AccountButton() {
-  const router = useRouter();
   const { account } = useAccount();
 
   return (
-    <button
+    <Link
       className="back-btn"
-      type="button"
-      aria-label={account ? `Signed in as ${account.name} — open your profile` : "Your profile"}
+      href="/profile"
+      aria-label={account ? `${account.name} — open your profile` : "Your profile"}
       title={account?.name}
-      onClick={() => router.push("/profile")}
     >
       <User size={20} />
-    </button>
+    </Link>
   );
 }

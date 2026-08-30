@@ -9,8 +9,7 @@ export type Account = {
   phone?: string;
   /** Prefills the ride pickup and meal delivery fields. */
   homeAddress?: string;
-  // --- Profile fields (PRD-002). All optional, so an account written by the
-  // sign-in code alone stays valid and loads without migration. ---
+  // --- added by PRD-002 (Veteran Profile) ---
   /** Free text, e.g. "Peanuts, shellfish". Shown read-only on the meal request. */
   allergies?: string;
   /** e.g. ["Diabetic-friendly", "Halal"]. Prefills the meal dietary chips. */

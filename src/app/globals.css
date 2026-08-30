@@ -157,6 +157,36 @@ img { display: block; max-width: 100%; }
 .seg-opt:not(:has(input:checked)):hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
 .seg-opt:has(input:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: -2px; }
 
+/* Tap-to-toggle pill chips (dietary restrictions, cuisine). Large enough for
+   the veteran audience; selected fills with the accent. */
+.chip-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.chip {
+  font-family: var(--font-body); font-size: 16px; line-height: 1;
+  padding: 13px 20px; min-height: 48px; border-radius: 999px; cursor: pointer;
+  color: var(--color-text); background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+}
+.chip:hover { border-color: var(--color-accent); }
+.chip-on {
+  background: var(--color-accent); color: var(--color-bg);
+  border-color: var(--color-accent);
+}
+.chip-on:hover { background: var(--color-accent-600); border-color: var(--color-accent-600); }
+
+/* Address source buttons — read clearly as tappable buttons, highlight the
+   active choice. */
+.addr-opts { display: flex; gap: 12px; }
+.addr-opt {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 56px; padding: 12px 14px; text-align: center; cursor: pointer;
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight); font-size: 16px;
+  color: var(--color-text); background: var(--color-surface);
+  border: 2px solid var(--color-divider); border-radius: 18px;
+}
+.addr-opt:not(:disabled):hover { border-color: var(--color-accent); }
+.addr-opt:disabled { opacity: 0.55; cursor: default; }
+.addr-opt-on { border-color: var(--color-accent); background: var(--color-accent-100); }
+
 /* — cards — */
 .card {
   display: flex; flex-direction: column; gap: var(--space-2);
@@ -273,37 +303,6 @@ textarea.big-input { min-height: 72px; resize: vertical; }
 .code-cell:focus-visible { border-color: var(--color-accent); outline-offset: 0; }
 
 .summary-row { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
-
-/* — choice chips: tap-to-toggle dietary and single-select cuisine — */
-.chip-group { display: flex; flex-wrap: wrap; gap: 10px; }
-.chip {
-  display: inline-flex; align-items: center; justify-content: center;
-  min-height: 48px; padding: 12px 18px; font-size: 16px; line-height: 1;
-  color: var(--color-text); background: var(--color-surface);
-  border: 1px solid var(--color-divider); border-radius: 999px;
-  cursor: pointer; font-family: var(--font-body);
-}
-.chip:hover { background: var(--color-neutral-300); }
-.chip[aria-pressed="true"] {
-  background: var(--color-accent); color: var(--color-bg); border-color: var(--color-accent);
-}
-.chip:disabled { opacity: 0.45; cursor: not-allowed; }
-
-/* — the "allergies on file" read-only callout on the meal request — */
-.note-card {
-  background: var(--color-accent-100); border-radius: 18px; padding: 16px 18px;
-}
-.note-card .note-title {
-  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
-  color: var(--color-accent-800); font-size: 17px; margin-bottom: 2px;
-}
-
-/* — grouping heading inside a form (profile sections) — */
-.section-label {
-  font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;
-  color: color-mix(in srgb, var(--color-text) 55%, transparent);
-  margin: var(--space-4) 0 0;
-}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

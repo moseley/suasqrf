@@ -5,21 +5,22 @@ import { Check } from "@/components/icons";
 
 type Flow = "ride" | "meal" | "shelter";
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 /**
- * Renders the meal `when` parameter for the receipt: ASAP (or empty) reads as
- * an immediate request; an ISO local date-time is shown in a friendly form.
+ * Renders the meal `when` parameter. Empty or "ASAP" reads as immediate;
+ * otherwise it is an ISO local date-time (e.g. 2026-09-02T18:00), formatted
+ * from its parts so no timezone can shift the hour the veteran picked.
  */
-function formatWhen(when: string): string {
-  if (!when || when === "ASAP") return "As soon as possible";
-  const parsed = new Date(when);
-  if (Number.isNaN(parsed.getTime())) return when;
-  return parsed.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+function formatWhen(value: string): string {
+  if (!value || value === "ASAP") return "As soon as possible";
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!match) return value;
+  const [, year, month, day, hourText, minute] = match;
+  let hour = Number(hourText);
+  const meridiem = hour >= 12 ? "PM" : "AM";
+  hour = hour % 12 || 12;
+  return `${MONTHS[Number(month) - 1]} ${Number(day)}, ${year}, ${hour}:${minute} ${meridiem}`;
 }
 
 const FLOWS = {
@@ -44,7 +45,7 @@ const FLOWS = {
     status: { label: "In progress", className: "tag tag-accent-2" },
     rows: (params: Record<string, string>) => [
       ["Delivery to", params.address],
-      ["When", params.when ? formatWhen(params.when) : ""],
+      ["When", formatWhen(params.when)],
       ["Dietary", params.diet ? params.diet.split(",").join(", ") : ""],
       ["Cuisine", params.cuisine],
       ["Allergies", params.allergies],

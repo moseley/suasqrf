@@ -3,92 +3,82 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Screen, ScreenHeader } from "@/components/screen";
+import { ChipGroup } from "@/components/chips";
+import { Check, Home as HomeIcon } from "@/components/icons";
 import { useAccount } from "@/lib/use-account";
 import { CUISINES, DIETARY_RESTRICTIONS } from "@/lib/meal-options";
+import { nextPhoneValue } from "@/lib/phone";
 
-type When = "asap" | "schedule";
+type Coords = { latitude: number; longitude: number };
 
-/**
- * Meal flow, step B — Request a meal delivery (PRD-001).
- *
- * Captures the fields an operator needs to dispatch a real meal: when, dietary
- * restrictions, cuisine, delivery instructions, and a delivery phone. Every
- * field but the address is optional, and everything we already know from the
- * profile (PRD-002) is prefilled once, so the common case is one tap.
- */
+/** Meal flow, step B — Request a meal delivery. Prefills from the profile. */
 export default function Page() {
   const router = useRouter();
   const { account } = useAccount();
 
   const [address, setAddress] = useState("");
-  const [when, setWhen] = useState<When>("asap");
+  const [coords, setCoords] = useState<Coords | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [geoError, setGeoError] = useState<string | null>(null);
+
+  const [whenMode, setWhenMode] = useState<"asap" | "schedule">("asap");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
-  const [diet, setDiet] = useState<string[]>([]);
+
+  // Allergies and preferences stay tucked away until the veteran opts in, so
+  // the common request is short.
+  const [hasDietary, setHasDietary] = useState(false);
+  const [diets, setDiets] = useState<string[]>([]);
   const [cuisine, setCuisine] = useState("");
+
   const [phone, setPhone] = useState("");
   const [instructions, setInstructions] = useState("");
 
-  const [locating, setLocating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const allergies = account?.allergies ?? "";
-
-  // Seed once from the saved profile, leaving later edits alone. The guard runs
-  // per mount and never overwrites a field the veteran has since changed.
+  // Seed the fields we already know once, then leave edits alone. When the
+  // profile carries allergies or preferences, open that section so the
+  // prefill is visible rather than hidden behind an unchecked box.
   const [seeded, setSeeded] = useState(false);
   useEffect(() => {
     if (seeded || !account) return;
-    if (account.homeAddress) setAddress(account.homeAddress);
     if (account.phone) setPhone(account.phone);
-    if (account.dietaryRestrictions?.length) setDiet(account.dietaryRestrictions);
+    if (account.dietaryRestrictions?.length) setDiets(account.dietaryRestrictions);
     if (account.cuisinePreference) setCuisine(account.cuisinePreference);
+    if (account.allergies || account.dietaryRestrictions?.length || account.cuisinePreference) {
+      setHasDietary(true);
+    }
     setSeeded(true);
   }, [account, seeded]);
 
-  function toggleDiet(option: string) {
-    setDiet((current) =>
-      current.includes(option)
-        ? current.filter((value) => value !== option)
-        : [...current, option],
-    );
+  const usingHome =
+    !coords && address !== "" && address === account?.homeAddress;
+
+  function chooseHome() {
+    setGeoError(null);
+    setCoords(null);
+    setAddress(account?.homeAddress ?? "");
   }
 
-  /** Fills the delivery address from the veteran's Home of Record. */
-  function useHomeOfRecord() {
-    if (account?.homeAddress) {
-      setAddress(account.homeAddress);
-      setError(null);
-    }
-  }
-
-  /**
-   * Drops a pin at the veteran's current location. Delivery apps accept a pin,
-   * so the coordinates go straight into the address as text; no maps key needed.
-   */
+  /** Asks the browser where the veteran is, mirroring the shelter screen. */
   function useCurrentLocation() {
     if (!("geolocation" in navigator)) {
-      setError("This device cannot share a location. Type an address instead.");
+      setGeoError("This device cannot share a location. Type an address instead.");
       return;
     }
-    // Geolocation is refused outright off HTTPS with a bare permission error
-    // that would otherwise look like the veteran declined.
     if (!window.isSecureContext) {
-      setError("Location needs a secure (https) connection. Type an address instead.");
+      setGeoError("Location needs a secure (https) connection. Type an address instead.");
       return;
     }
 
     setLocating(true);
-    setError(null);
-
+    setGeoError(null);
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        const { latitude, longitude } = position.coords;
-        setAddress(`Current location — ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
+        setCoords({ latitude: position.coords.latitude, longitude: position.coords.longitude });
+        setAddress("");
         setLocating(false);
       },
       (failure) => {
-        setError(
+        setGeoError(
           failure.code === failure.PERMISSION_DENIED
             ? "Location is blocked for this site. Allow it in your browser settings, or type an address."
             : failure.code === failure.TIMEOUT
@@ -101,18 +91,30 @@ export default function Page() {
     );
   }
 
+  function toggleDiet(option: string) {
+    setDiets((current) =>
+      current.includes(option)
+        ? current.filter((value) => value !== option)
+        : [...current, option],
+    );
+  }
+
+  const canSubmit = coords !== null || address.trim() !== "";
+
   function submit() {
-    // "when" is ASAP unless both a date and time are set, then their ISO join.
-    const whenValue = when === "schedule" && date && time ? `${date}T${time}` : "ASAP";
+    const deliveryAddress = coords ? "Current location" : address.trim();
+    const when = whenMode === "schedule" && date && time ? `${date}T${time}` : "";
 
     const params = new URLSearchParams();
-    params.set("address", address);
-    params.set("when", whenValue);
-    if (diet.length) params.set("diet", diet.join(","));
-    if (cuisine) params.set("cuisine", cuisine);
+    params.set("address", deliveryAddress);
+    if (when) params.set("when", when);
+    if (hasDietary) {
+      if (diets.length) params.set("diet", diets.join(","));
+      if (cuisine) params.set("cuisine", cuisine);
+      if (account?.allergies) params.set("allergies", account.allergies);
+    }
     if (phone.trim()) params.set("phone", phone.trim());
     if (instructions.trim()) params.set("instructions", instructions.trim());
-    if (allergies) params.set("allergies", allergies);
 
     router.push(`/confirmation/meal?${params}`);
   }
@@ -124,121 +126,158 @@ export default function Page() {
       <h2 style={{ margin: 0 }}>Request a meal delivery</h2>
 
       <div className="big-field">
-        <label htmlFor="address">Delivery address</label>
-        <input
-          id="address"
-          className="big-input"
-          value={address}
-          onChange={(event) => setAddress(event.target.value)}
-          placeholder="Street address"
-        />
-        <div style={{ display: "flex", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
+        <label>Delivery address</label>
+
+        <div className="addr-opts">
           <button
-            className="btn btn-ghost"
             type="button"
-            style={{ fontSize: 15 }}
-            disabled={!account?.homeAddress}
-            onClick={useHomeOfRecord}
-          >
-            Veteran&rsquo;s HOR (Home of Record)
-          </button>
-          <button
-            className="btn btn-ghost"
-            type="button"
-            style={{ fontSize: 15 }}
+            className={coords ? "addr-opt addr-opt-on" : "addr-opt"}
             disabled={locating}
             onClick={useCurrentLocation}
+            aria-pressed={coords !== null}
           >
-            {locating ? "Finding you…" : "Use current location"}
+            {locating ? "Finding you…" : "Current location"}
+          </button>
+          <button
+            type="button"
+            className={usingHome ? "addr-opt addr-opt-on" : "addr-opt"}
+            onClick={chooseHome}
+            aria-pressed={usingHome}
+          >
+            <HomeIcon size={18} />
+            Home of record
           </button>
         </div>
-      </div>
 
-      <div className="big-field">
-        <label>When should it arrive?</label>
-        <div className="seg" role="group" aria-label="When should it arrive?">
-          <label className="seg-opt">
-            <input
-              type="radio"
-              name="when"
-              checked={when === "asap"}
-              onChange={() => setWhen("asap")}
-            />
-            As soon as possible
-          </label>
-          <label className="seg-opt">
-            <input
-              type="radio"
-              name="when"
-              checked={when === "schedule"}
-              onChange={() => setWhen("schedule")}
-            />
-            Schedule
-          </label>
-        </div>
-
-        {when === "schedule" ? (
-          <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-            <input
-              className="big-input"
-              type="date"
-              aria-label="Delivery date"
-              value={date}
-              onChange={(event) => setDate(event.target.value)}
-            />
-            <input
-              className="big-input"
-              type="time"
-              aria-label="Delivery time"
-              value={time}
-              onChange={(event) => setTime(event.target.value)}
-            />
+        {coords ? (
+          <div
+            className="card elev-sm"
+            style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 12 }}
+          >
+            <Check size={20} color="var(--color-accent-2-700)" />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 16 }}>Using your current location</div>
+              <div className="text-muted" style={{ fontSize: 13 }}>
+                {coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}
+              </div>
+            </div>
+            <button className="btn btn-ghost" type="button" onClick={() => setCoords(null)}>
+              Change
+            </button>
           </div>
+        ) : (
+          <input
+            id="address"
+            className="big-input"
+            value={address}
+            onChange={(event) => {
+              setAddress(event.target.value);
+              setGeoError(null);
+            }}
+            placeholder="Or enter a delivery address"
+            style={{ marginTop: 12 }}
+          />
+        )}
+
+        {geoError ? (
+          <p style={{ fontSize: 14, color: "var(--color-accent-700)", margin: "8px 0 0" }}>
+            {geoError}
+          </p>
         ) : null}
       </div>
 
-      {allergies ? (
-        <div className="note-card">
-          <div className="note-title">Allergies on file</div>
-          <div>{allergies}</div>
-        </div>
+      <label className="big-check" style={{ alignItems: "center" }}>
+        <input
+          type="checkbox"
+          checked={hasDietary}
+          onChange={(event) => setHasDietary(event.target.checked)}
+        />
+        <span className="check-box">
+          <Check size={16} />
+        </span>
+        <span style={{ fontSize: 20, fontWeight: 700 }}>I have allergies or dietary needs</span>
+      </label>
+
+      {hasDietary ? (
+        <>
+          {account?.allergies ? (
+            <div className="card" style={{ background: "var(--color-accent-100)", gap: 2 }}>
+              <span
+                style={{
+                  fontFamily: "var(--font-heading)",
+                  color: "var(--color-accent-700)",
+                  fontSize: 18,
+                }}
+              >
+                Allergies on file
+              </span>
+              <span style={{ fontSize: 16 }}>{account.allergies}</span>
+            </div>
+          ) : null}
+
+          <div className="big-field">
+            <label>Dietary restrictions</label>
+            <ChipGroup
+              options={DIETARY_RESTRICTIONS}
+              isSelected={(option) => diets.includes(option)}
+              onToggle={toggleDiet}
+            />
+          </div>
+
+          <div className="big-field">
+            <label>Preferred cuisine</label>
+            <ChipGroup
+              options={CUISINES}
+              isSelected={(option) => cuisine === option}
+              onToggle={(option) => setCuisine((current) => (current === option ? "" : option))}
+            />
+            <p className="text-muted" style={{ fontSize: 13, margin: "10px 0 0" }}>
+              Your preferred cuisine is not guaranteed, but we prioritize it when matching a kitchen.
+            </p>
+          </div>
+        </>
       ) : null}
 
       <div className="big-field">
-        <label>Dietary restrictions</label>
-        <div className="chip-group">
-          {DIETARY_RESTRICTIONS.map((option) => (
-            <button
-              key={option}
-              type="button"
-              className="chip"
-              aria-pressed={diet.includes(option)}
-              onClick={() => toggleDiet(option)}
+        <label>When should it arrive?</label>
+        <div className="seg" style={{ width: "100%" }}>
+          {(["asap", "schedule"] as const).map((mode) => (
+            <label
+              key={mode}
+              className="seg-opt"
+              style={{ flex: 1, justifyContent: "center", fontSize: 16, padding: "15px 12px" }}
             >
-              {option}
-            </button>
+              <input
+                type="radio"
+                name="when"
+                checked={whenMode === mode}
+                onChange={() => setWhenMode(mode)}
+              />
+              {mode === "asap" ? "As soon as possible" : "Schedule"}
+            </label>
           ))}
         </div>
-      </div>
 
-      <div className="big-field">
-        <label>Preferred cuisine</label>
-        <div className="chip-group">
-          {CUISINES.map((option) => (
-            <button
-              key={option}
-              type="button"
-              className="chip"
-              aria-pressed={cuisine === option}
-              onClick={() => setCuisine((current) => (current === option ? "" : option))}
-            >
-              {option}
-            </button>
-          ))}
-        </div>
-        <p className="text-muted" style={{ fontSize: 13, margin: "8px 0 0" }}>
-          Your preferred cuisine is not guaranteed, but we prioritize it when matching a kitchen.
-        </p>
+        {whenMode === "schedule" ? (
+          <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
+            <input
+              aria-label="Delivery date"
+              className="big-input"
+              type="date"
+              value={date}
+              onChange={(event) => setDate(event.target.value)}
+              style={{ flex: 1 }}
+            />
+            <input
+              aria-label="Delivery time"
+              className="big-input"
+              type="time"
+              value={time}
+              onChange={(event) => setTime(event.target.value)}
+              style={{ flex: 1 }}
+            />
+          </div>
+        ) : null}
       </div>
 
       <div className="big-field">
@@ -249,8 +288,8 @@ export default function Page() {
           type="tel"
           inputMode="tel"
           value={phone}
-          onChange={(event) => setPhone(event.target.value)}
-          placeholder="(555) 555-5555"
+          onChange={(event) => setPhone(nextPhoneValue(event.target.value, phone))}
+          placeholder="555-555-5555"
         />
       </div>
 
@@ -265,16 +304,12 @@ export default function Page() {
         />
       </div>
 
-      {error ? (
-        <p style={{ fontSize: 14, color: "var(--color-accent-700)", margin: 0 }}>{error}</p>
-      ) : null}
-
       <div className="grow" />
 
       <button
         className="big-btn big-btn-primary"
         type="button"
-        disabled={address.trim() === ""}
+        disabled={!canSubmit}
         onClick={submit}
       >
         Request Meal
