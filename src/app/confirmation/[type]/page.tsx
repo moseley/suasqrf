@@ -40,6 +40,7 @@ const FLOWS = {
     rows: (params: Record<string, string>) => [
       ["Location", params.location],
       ["People", params.people],
+      ["Property", params.hotel],
     ],
   },
 } satisfies Record<Flow, unknown>;
