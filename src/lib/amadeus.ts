@@ -84,14 +84,32 @@ type HotelListResponse = {
 };
 
 /**
- * Sample properties used when Amadeus is unconfigured. Deliberately generic:
- * these are not real bookable hotels and the surface labels them as samples.
+ * Sample properties used when Amadeus is unconfigured.
+ *
+ * Placed a short way from the search point so the caller can resolve a real
+ * street address for them, which is what makes the onward ride handoff work in
+ * a demo. They are not real hotels, and every surface says so.
  */
-const SAMPLE_HOTELS: Hotel[] = [
-  { hotelId: "SAMPLE001", name: "Sample Inn — Airport", distanceMiles: 3.2, sample: true },
-  { hotelId: "SAMPLE002", name: "Sample Lodge — Downtown", distanceMiles: 7.8, sample: true },
-  { hotelId: "SAMPLE003", name: "Sample Suites — Midtown", distanceMiles: 14.1, sample: true },
-];
+function sampleHotels(latitude: number, longitude: number): Hotel[] {
+  return [
+    {
+      hotelId: "SAMPLE001",
+      name: "Sample Inn",
+      latitude: latitude + 0.012,
+      longitude: longitude + 0.008,
+      distanceMiles: 1.0,
+      sample: true,
+    },
+    {
+      hotelId: "SAMPLE002",
+      name: "Sample Lodge",
+      latitude: latitude - 0.021,
+      longitude: longitude + 0.019,
+      distanceMiles: 1.9,
+      sample: true,
+    },
+  ];
+}
 
 export type HotelSearch = {
   configured: boolean;
@@ -109,7 +127,7 @@ export async function findHotelsNear(
   radiusMiles: number = SEARCH_RADIUS_MILES,
 ): Promise<HotelSearch> {
   const config = getAmadeusConfig();
-  if (!config) return { configured: false, hotels: SAMPLE_HOTELS };
+  if (!config) return { configured: false, hotels: sampleHotels(latitude, longitude) };
 
   try {
     const token = await getAccessToken(config);
@@ -134,13 +152,16 @@ export async function findHotelsNear(
 
     return {
       configured: true,
-      hotels: (body.data ?? []).map((hotel) => ({
-        hotelId: hotel.hotelId,
-        name: hotel.name,
-        distanceMiles: hotel.distance?.unit === "MILE" ? hotel.distance.value : undefined,
-        latitude: hotel.geoCode?.latitude,
-        longitude: hotel.geoCode?.longitude,
-      })),
+      hotels: (body.data ?? [])
+        .map((hotel) => ({
+          hotelId: hotel.hotelId,
+          name: hotel.name,
+          distanceMiles: hotel.distance?.unit === "MILE" ? hotel.distance.value : undefined,
+          latitude: hotel.geoCode?.latitude,
+          longitude: hotel.geoCode?.longitude,
+        }))
+        // Nearest first: the caller books the head of this list.
+        .sort((a, b) => (a.distanceMiles ?? Infinity) - (b.distanceMiles ?? Infinity)),
     };
   } catch (error) {
     console.error("Amadeus hotel search error", error);
