@@ -1,24 +1,27 @@
 import "server-only";
 
 import { createMockProvider } from "./mock-trips";
-import type { Trip, TripRequest } from "./uber-rides";
+import type { Trip, TripRequest, TripStatus } from "./uber-rides";
 
 /**
- * Local veteran-driver ride service.
+ * Veterans To Veterans — the local ride service used when a rider asks for a
+ * veteran driver.
  *
- * A separate provider from Uber, used when the rider asks for a veteran
- * driver. Point it at a real service with VETERAN_RIDES_API_URL and
- * VETERAN_RIDES_API_KEY; with neither set it falls back to a stand-in that
- * behaves like the Uber one, so the flow is testable today.
+ * Speaks the Veteran Network ride API: one POST /api/v1/ride-requests matches
+ * a veteran driver and books them, so there is no search-then-book handshake
+ * to orchestrate here.
  *
- * The remote service is expected to speak the same Trip shape. Adapt it here
- * if the real one differs — nothing outside this module should need to care.
+ * Point it at a deployment with VETERAN_RIDES_API_URL. Unset, it falls back to
+ * a local stand-in so the flow stays testable.
  */
 
 export const PROVIDER_NAME = "Veterans To Veterans";
 
 /** Ids are prefixed so a lookup can tell which provider owns a trip. */
 const PREFIX = "vrs";
+
+const DEFAULT_DURATION_MINUTES = 60;
+const DEFAULT_MAX_DISTANCE_KM = 40;
 
 const fallback = createMockProvider({
   prefix: PREFIX,
@@ -33,7 +36,7 @@ const fallback = createMockProvider({
 type ServiceConfig = { apiUrl: string; apiKey?: string };
 
 function getConfig(): ServiceConfig | null {
-  const apiUrl = process.env.VETERAN_RIDES_API_URL;
+  const apiUrl = process.env.VETERAN_RIDES_API_URL?.replace(/\/+$/, "");
   if (!apiUrl) return null;
   return { apiUrl, apiKey: process.env.VETERAN_RIDES_API_KEY };
 }
@@ -42,34 +45,84 @@ export function owns(requestId: string): boolean {
   return requestId.startsWith(`${PREFIX}-`) || requestId.startsWith(`${PREFIX}:`);
 }
 
-function headers(config: ServiceConfig): HeadersInit {
-  const result: Record<string, string> = { "Content-Type": "application/json" };
-  if (config.apiKey) result.Authorization = `Bearer ${config.apiKey}`;
-  return result;
-}
-
-/** Remote ids are namespaced on the way in and stripped on the way out. */
 function tag(id: string): string {
   return `${PREFIX}:${id}`;
 }
 
-function untag(requestId: string): string {
-  return requestId.startsWith(`${PREFIX}:`) ? requestId.slice(PREFIX.length + 1) : requestId;
+/** US five-digit ZIP out of a free-text address, when there is one. */
+function zipFrom(address: string | undefined): string | undefined {
+  return address?.match(/\b(\d{5})(?:-\d{4})?\b/)?.[1];
+}
+
+/**
+ * The API reports a match and a booking state but issues no id of its own and
+ * exposes no read endpoint, so the trip is held here against the
+ * Idempotency-Key we sent. It therefore does not change after booking — the
+ * status screen shows what was recorded at match time and nothing more.
+ */
+const booked = new Map<string, Trip>();
+
+type RideResponse = {
+  status?: string;
+  veteran?: {
+    name?: string;
+    carModel?: string;
+    licensePlate?: string;
+    zipCode?: string;
+  } | null;
+  booking?: { status?: string } | null;
+  message?: string;
+};
+
+function statusFrom(response: RideResponse): TripStatus {
+  if (response.status && response.status !== "matched") return "no_drivers_available";
+  if (!response.veteran) return "no_drivers_available";
+
+  switch (response.booking?.status) {
+    case "confirmed":
+      return "accepted";
+    case "completed":
+      return "completed";
+    case "cancelled":
+      return "rider_canceled";
+    default:
+      return "processing";
+  }
 }
 
 export async function createTrip(request: TripRequest): Promise<Trip> {
   const config = getConfig();
   if (!config) return fallback.create(request);
 
-  const response = await fetch(`${config.apiUrl}/rides`, {
+  // Doubles as the trip's identity, since the API returns none.
+  const idempotencyKey = crypto.randomUUID();
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Idempotency-Key": idempotencyKey,
+  };
+  if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
+
+  const response = await fetch(`${config.apiUrl}/api/v1/ride-requests`, {
     method: "POST",
-    headers: headers(config),
+    headers,
     body: JSON.stringify({
-      rider: request.guest,
-      pickup: request.pickup,
-      dropoff: request.dropoff,
-      pickupTimeMs: request.pickupTimeMs,
-      veteranDriverRequested: true,
+      rider: {
+        name: [request.guest.firstName, request.guest.lastName].filter(Boolean).join(" "),
+        veteran: true,
+        phone: request.guest.phoneNumber,
+      },
+      currentAddress: {
+        address: request.pickup.address ?? "",
+        ...(zipFrom(request.pickup.address) ? { zipCode: zipFrom(request.pickup.address) } : {}),
+      },
+      destinationAddress: {
+        address: request.dropoff.address ?? "",
+        ...(zipFrom(request.dropoff.address) ? { zipCode: zipFrom(request.dropoff.address) } : {}),
+      },
+      durationMinutes: DEFAULT_DURATION_MINUTES,
+      maxDistanceKm: DEFAULT_MAX_DISTANCE_KM,
+      ...(request.noteForDriver ? { notes: request.noteForDriver } : {}),
     }),
     cache: "no-store",
   });
@@ -78,24 +131,32 @@ export async function createTrip(request: TripRequest): Promise<Trip> {
     throw new Error(`Veteran ride request failed: ${response.status} ${await response.text()}`);
   }
 
-  const trip = (await response.json()) as Trip;
-  return { ...trip, requestId: tag(trip.requestId), provider: PROVIDER_NAME };
+  const body = (await response.json()) as RideResponse;
+  const status = statusFrom(body);
+
+  const trip: Trip = {
+    requestId: tag(idempotencyKey),
+    status,
+    provider: PROVIDER_NAME,
+    pickup: request.pickup,
+    dropoff: request.dropoff,
+    // Only present once a veteran is actually matched.
+    driver: body.veteran?.name ? { name: body.veteran.name } : undefined,
+    vehicle: body.veteran?.carModel
+      ? { model: body.veteran.carModel, licensePlate: body.veteran.licensePlate }
+      : undefined,
+  };
+
+  booked.set(idempotencyKey, trip);
+  return trip;
 }
 
 export async function getTrip(requestId: string): Promise<Trip | null> {
   const config = getConfig();
   if (!config) return fallback.get(requestId);
 
-  const response = await fetch(`${config.apiUrl}/rides/${untag(requestId)}`, {
-    headers: headers(config),
-    cache: "no-store",
-  });
-
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`Veteran ride lookup failed: ${response.status}`);
-
-  const trip = (await response.json()) as Trip;
-  return { ...trip, requestId: tag(trip.requestId), provider: PROVIDER_NAME };
+  const key = requestId.startsWith(`${PREFIX}:`) ? requestId.slice(PREFIX.length + 1) : requestId;
+  return booked.get(key) ?? null;
 }
 
 /** Sandbox stepping, available only against the stand-in. */
