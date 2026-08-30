@@ -12,7 +12,6 @@ const SERVICES = [
     Icon: Car,
     tint: "var(--color-accent-100)",
     stroke: "var(--color-accent-700)",
-    badge: null,
   },
   {
     href: "/request/meal",
@@ -21,7 +20,6 @@ const SERVICES = [
     Icon: Utensils,
     tint: "var(--color-accent-2-100)",
     stroke: "var(--color-accent-2-700)",
-    badge: null,
   },
   {
     href: "/request/shelter",
@@ -30,7 +28,6 @@ const SERVICES = [
     Icon: HomeIcon,
     tint: "var(--color-accent-100)",
     stroke: "var(--color-accent-700)",
-    badge: "24/7",
   },
 ] as const;
 
@@ -42,7 +39,7 @@ export default function Page() {
 
       <Greeting />
 
-      {SERVICES.map(({ href, title, body, Icon, tint, stroke, badge }) => (
+      {SERVICES.map(({ href, title, body, Icon, tint, stroke }) => (
         <Link className="svc-card" href={href} key={href}>
           <div className="icon-circle" style={{ background: tint }}>
             <Icon size={26} color={stroke} />
@@ -53,13 +50,7 @@ export default function Page() {
               {body}
             </p>
           </div>
-          {badge ? (
-            <span className="tag tag-outline" style={{ fontSize: 10 }}>
-              {badge}
-            </span>
-          ) : (
-            <ChevronRight size={16} />
-          )}
+          <ChevronRight size={16} />
         </Link>
       ))}
     </Screen>
