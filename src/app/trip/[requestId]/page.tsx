@@ -117,6 +117,7 @@ export default function Page({ params }: PageProps<"/trip/[requestId]">) {
             {trip.driver.name.charAt(0)}
           </div>
           <h4 style={{ margin: 0 }}>{trip.driver.name}</h4>
+          {trip.provider ? <span className="tag tag-neutral">{trip.provider}</span> : null}
 
           {/* Sized to be read at a glance as a car pulls up. */}
           {trip.vehicle ? (

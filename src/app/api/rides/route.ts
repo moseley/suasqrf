@@ -8,6 +8,7 @@ import {
 } from "@/lib/uber-rides";
 import { createMockTrip, getMockTrip, isMockEnabled } from "@/lib/uber-rides-mock";
 import { geocode } from "@/lib/geocode";
+import * as veteranRides from "@/lib/veteran-rides";
 
 /**
  * Books a guest trip, and reports one back.
@@ -46,10 +47,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const { guest, productId, fareId, note, pickupTime } = (payload ?? {}) as Record<
-    string,
-    unknown
-  >;
+  const { guest, productId, fareId, note, pickupTime, veteranDriver } = (payload ??
+    {}) as Record<string, unknown>;
   const pickupTimeMs = typeof pickupTime === "number" ? pickupTime : undefined;
   const body = (payload ?? {}) as Record<string, unknown>;
 
@@ -85,6 +84,27 @@ export async function POST(request: Request) {
     phoneNumber: rider.phoneNumber,
     email: typeof rider.email === "string" ? rider.email : undefined,
   };
+
+  // A veteran driver is a different service entirely, not an Uber option.
+  if (veteranDriver === true) {
+    try {
+      const trip = await veteranRides.createTrip({
+        guest: riderDetails,
+        pickup,
+        dropoff,
+        productId: "veteran-standard",
+        noteForDriver: typeof note === "string" ? note : undefined,
+        pickupTimeMs,
+      });
+      return NextResponse.json({ configured: true, ...trip });
+    } catch (error) {
+      console.error("Veteran ride request failed", error);
+      return NextResponse.json(
+        { error: "Could not reach the veteran driver service." },
+        { status: 502 },
+      );
+    }
+  }
 
   // Local stand-in while guests.trips approval is pending. Same shapes, so
   // turning it off is the only change needed once the real scope lands.
@@ -138,7 +158,8 @@ export async function POST(request: Request) {
 /** GET /api/rides?requestId=... — the current recorded state of a trip. */
 export async function GET(request: Request) {
   const config = getRidesConfig();
-  if (!config && !isMockEnabled()) {
+  const lookupId = new URL(request.url).searchParams.get("requestId") ?? "";
+  if (!config && !isMockEnabled() && !veteranRides.owns(lookupId)) {
     return NextResponse.json(
       { configured: false, reason: "Uber Guest Rides credentials are not set." },
       { status: 503 },
@@ -148,6 +169,17 @@ export async function GET(request: Request) {
   const requestId = new URL(request.url).searchParams.get("requestId");
   if (!requestId) {
     return NextResponse.json({ error: "requestId is required." }, { status: 400 });
+  }
+
+  if (veteranRides.owns(requestId)) {
+    try {
+      const trip = await veteranRides.getTrip(requestId);
+      if (!trip) return NextResponse.json({ error: "Unknown trip." }, { status: 404 });
+      return NextResponse.json({ configured: true, ...trip });
+    } catch (error) {
+      console.error("Veteran ride lookup failed", error);
+      return NextResponse.json({ error: "Could not read the trip." }, { status: 502 });
+    }
   }
 
   if (!config) {

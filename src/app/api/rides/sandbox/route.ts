@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRidesConfig, type TripStatus } from "@/lib/uber-rides";
 import { isMockEnabled, resumeMockTrip, setMockStatus } from "@/lib/uber-rides-mock";
+import * as veteranRides from "@/lib/veteran-rides";
 import { requireRidesConfig, setDriverState, type DriverState } from "@/lib/uber-sandbox";
 
 /**
@@ -24,13 +25,6 @@ const AS_STATUS: Record<DriverState, TripStatus> = {
 
 export async function POST(request: Request) {
   const config = getRidesConfig();
-  if (!config && !isMockEnabled()) {
-    return NextResponse.json(
-      { error: "Set UBER_RIDES_MOCK=1 or configure Guest Rides credentials." },
-      { status: 503 },
-    );
-  }
-
   let payload: unknown;
   try {
     payload = await request.json();
@@ -40,13 +34,32 @@ export async function POST(request: Request) {
 
   const { requestId, state, driverId, resume } = (payload ?? {}) as Record<string, unknown>;
 
-  if (!config) {
+  if (!config && !isMockEnabled() && !(typeof requestId === "string" && veteranRides.owns(requestId))) {
+    return NextResponse.json(
+      { error: "Set UBER_RIDES_MOCK=1 or configure Guest Rides credentials." },
+      { status: 503 },
+    );
+  }
+
+  // The veteran service has its own stand-in to step.
+  const veteranTrip = typeof requestId === "string" && veteranRides.owns(requestId);
+  const setStatus = veteranTrip ? veteranRides.sandbox.setStatus : setMockStatus;
+  const resumeTrip = veteranTrip ? veteranRides.sandbox.resume : resumeMockTrip;
+
+  if (veteranTrip && !veteranRides.sandbox.available()) {
+    return NextResponse.json(
+      { error: "The veteran service is pointed at a real API; step it there." },
+      { status: 503 },
+    );
+  }
+
+  if (!config || veteranTrip) {
     if (typeof requestId !== "string") {
       return NextResponse.json({ error: "requestId is required." }, { status: 400 });
     }
 
     if (resume === true) {
-      const trip = resumeMockTrip(requestId);
+      const trip = resumeTrip(requestId);
       if (!trip) return NextResponse.json({ error: "Unknown trip." }, { status: 404 });
       return NextResponse.json({ mock: true, ...trip });
     }
@@ -58,7 +71,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const trip = setMockStatus(requestId, AS_STATUS[state as DriverState]);
+    const trip = setStatus(requestId, AS_STATUS[state as DriverState]);
     if (!trip) return NextResponse.json({ error: "Unknown trip." }, { status: 404 });
     return NextResponse.json({ mock: true, ...trip });
   }

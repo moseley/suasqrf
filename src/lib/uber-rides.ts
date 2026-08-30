@@ -187,6 +187,8 @@ export type Trip = {
   driverLocation?: { latitude: number; longitude: number };
   /** Driving geometry for the map. Absent means fall back to a straight line. */
   route?: LatLng[];
+  /** Which service is fulfilling the ride, when more than one can. */
+  provider?: string;
 };
 
 type TripResponse = {

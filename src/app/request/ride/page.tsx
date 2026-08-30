@@ -3,7 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Screen, ScreenHeader } from "@/components/screen";
+import { Check } from "@/components/icons";
 import { useAccount } from "@/lib/use-account";
+
+/** Kept in step with PROVIDER_NAME in src/lib/veteran-rides.ts. */
+const VETERAN_SERVICE = "Veterans To Veterans";
 
 /** `datetime-local` wants local wall-clock time, not an ISO instant. */
 function toLocalInputValue(date: Date): string {
@@ -21,7 +25,7 @@ export default function Page() {
   const [pickup, setPickup] = useState("");
   const [dropoff, setDropoff] = useState("");
   const [when, setWhen] = useState<"now" | "schedule">("now");
-  const [notes, setNotes] = useState("");
+  const [veteranDriver, setVeteranDriver] = useState(false);
 
   const [booking, setBooking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +73,7 @@ export default function Page() {
           },
           pickupAddress: pickup,
           dropoffAddress: dropoff,
-          note: notes || undefined,
+          veteranDriver,
           // Epoch milliseconds, which is what the provider's scheduling takes.
           pickupTime: scheduling && scheduledFor ? scheduledFor.getTime() : undefined,
         }),
@@ -162,16 +166,22 @@ export default function Page() {
         </div>
       ) : null}
 
-      <div className="big-field">
-        <label htmlFor="notes">Notes (optional)</label>
-        <textarea
-          id="notes"
-          className="big-input"
-          value={notes}
-          onChange={(event) => setNotes(event.target.value)}
-          placeholder="Anything the driver should know"
+      <label className="big-check">
+        <input
+          type="checkbox"
+          checked={veteranDriver}
+          onChange={(event) => setVeteranDriver(event.target.checked)}
         />
-      </div>
+        <span className="check-box">
+          <Check size={16} />
+        </span>
+        <span>
+          Request a veteran driver
+          <span className="text-muted" style={{ display: "block", fontSize: 13 }}>
+            Handled by the {VETERAN_SERVICE}, not Uber.
+          </span>
+        </span>
+      </label>
 
       {error ? (
         <p style={{ fontSize: 14, color: "var(--color-accent-700)", margin: 0 }}>{error}</p>
