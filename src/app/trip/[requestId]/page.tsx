@@ -6,6 +6,7 @@ import { Screen, ScreenHeader } from "@/components/screen";
 import { TripMap } from "@/components/trip-map";
 import { Alert } from "@/components/icons";
 import { present, tagClass } from "@/lib/trip-labels";
+import { shortReference } from "@/lib/trip-reference";
 import type { Trip } from "@/lib/uber-rides";
 
 const POLL_MS = 4000;
@@ -168,7 +169,7 @@ export default function Page({ params }: PageProps<"/trip/[requestId]">) {
         ) : null}
         <div className="summary-row">
           <span className="text-muted">Reference</span>
-          <span>{trip.requestId}</span>
+          <span>{shortReference(trip.requestId)}</span>
         </div>
       </div>
 

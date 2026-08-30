@@ -304,6 +304,10 @@ textarea.big-input { min-height: 72px; resize: vertical; }
 .code-cell:focus-visible { border-color: var(--color-accent); outline-offset: 0; }
 
 .summary-row { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+/* Values are user or provider data of unknown length; wrap rather than spill.
+   The label keeps its own line so a squeezed column cannot break it. */
+.summary-row > span:first-child { white-space: nowrap; flex: none; }
+.summary-row > span:last-child { text-align: right; min-width: 0; overflow-wrap: anywhere; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
