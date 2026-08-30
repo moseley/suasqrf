@@ -317,3 +317,21 @@ textarea.big-input { min-height: 72px; resize: vertical; }
 .suggest-meta { font-size: 15px; color: color-mix(in srgb, var(--color-text) 62%, transparent); }
 /* Distance leads, so the nearest is scannable without reading the address. */
 .suggest-distance { color: var(--color-accent-700); }
+
+/* Brand mark in the screen header — the same lockup the sign-in screen had,
+   sized to sit beside a back button without crowding it. */
+/* An explicit .grow spacer now positions the right-hand slot, so the original
+   space-between would double up and push the brand off-centre. */
+.scr-head { gap: 12px; justify-content: flex-start; }
+.brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.brand-mark {
+  width: 44px; height: 44px; border-radius: 50%; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--color-accent-100);
+}
+.brand-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.brand-kicker { font-size: 10px; letter-spacing: 0.06em; align-self: flex-start; padding: 2px 8px; }
+.brand-title {
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: 17px; line-height: 1; white-space: nowrap;
+}

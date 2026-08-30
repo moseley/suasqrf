@@ -38,7 +38,7 @@ const SERVICES = [
 export default function Page() {
   return (
     <Screen>
-      <ScreenHeader brand right={<AccountButton />} />
+      <ScreenHeader right={<AccountButton />} />
 
       <Greeting />
 

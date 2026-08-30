@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Route } from "next";
 import type { ReactNode } from "react";
-import { ArrowLeft } from "./icons";
+import { ArrowLeft, ShieldCheck } from "./icons";
 
 /** The phone-scale page frame every screen sits in. */
 export function Screen({
@@ -21,16 +21,17 @@ export function Screen({
   );
 }
 
-/** Back chevron on the left, optional step dots centred, 44px balance on the right. */
+/**
+ * The one header every screen wears: back chevron where there is somewhere to
+ * go, then the brand mark, then step dots or a slot on the right.
+ */
 export function ScreenHeader({
   back,
   steps,
-  brand,
   right,
 }: {
   back?: Route;
   steps?: { total: number; current: number };
-  brand?: boolean;
   right?: ReactNode;
 }) {
   return (
@@ -39,13 +40,19 @@ export function ScreenHeader({
         <Link className="back-btn" href={back} aria-label="Go back">
           <ArrowLeft size={18} />
         </Link>
-      ) : brand ? (
-        <span style={{ fontFamily: "var(--font-heading)", fontSize: 17 }}>
-          S.U.A.S. Q.R.F.
+      ) : null}
+
+      <div className="brand">
+        <span className="brand-mark">
+          <ShieldCheck size={22} color="var(--color-accent-700)" />
         </span>
-      ) : (
-        <div className="spacer-44" />
-      )}
+        <span className="brand-text">
+          <span className="tag tag-outline brand-kicker">VETERAN SUPPORT</span>
+          <span className="brand-title">S.U.A.S. Q.R.F.</span>
+        </span>
+      </div>
+
+      <div className="grow" />
 
       {steps ? (
         <div className="dots" aria-label={`Step ${steps.current} of ${steps.total}`}>
@@ -55,7 +62,7 @@ export function ScreenHeader({
         </div>
       ) : null}
 
-      {right ?? <div className="spacer-44" />}
+      {right ?? null}
     </div>
   );
 }

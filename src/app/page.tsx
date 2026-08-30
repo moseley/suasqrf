@@ -2,8 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Screen } from "@/components/screen";
-import { Check, ShieldCheck } from "@/components/icons";
+import { Screen, ScreenHeader } from "@/components/screen";
+import { Check } from "@/components/icons";
 import { MOCK_ACCOUNT, MOCK_PHONE, isMockPhone, saveAccount } from "@/lib/account";
 import { requestCode, verifyCode } from "@/app/actions/signin";
 import { nextPhoneValue, toE164 } from "@/lib/phone";
@@ -120,15 +120,7 @@ export default function Page() {
   if (stage === "code") {
     return (
       <Screen>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <div className="icon-circle" style={{ background: "var(--color-accent-100)" }}>
-            <ShieldCheck size={26} color="var(--color-accent-700)" />
-          </div>
-          <div>
-            <span className="tag tag-outline">VETERAN SUPPORT</span>
-            <h4 style={{ margin: "6px 0 0" }}>S.U.A.S. Q.R.F.</h4>
-          </div>
-        </div>
+        <ScreenHeader />
 
         <div>
           <h2 style={{ marginBottom: 4 }}>Enter your code</h2>
@@ -182,15 +174,7 @@ export default function Page() {
 
   return (
     <Screen>
-      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-        <div className="icon-circle" style={{ background: "var(--color-accent-100)" }}>
-          <ShieldCheck size={26} color="var(--color-accent-700)" />
-        </div>
-        <div>
-          <span className="tag tag-outline">VETERAN SUPPORT</span>
-          <h4 style={{ margin: "6px 0 0" }}>S.U.A.S. Q.R.F.</h4>
-        </div>
-      </div>
+      <ScreenHeader />
 
       <div className="seg" style={{ width: "100%", display: "flex" }}>
         {(["register", "signin"] as const).map((option) => (
