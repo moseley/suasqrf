@@ -5,6 +5,23 @@ import { Check } from "@/components/icons";
 
 type Flow = "ride" | "meal" | "shelter";
 
+/**
+ * Renders the meal `when` parameter for the receipt: ASAP (or empty) reads as
+ * an immediate request; an ISO local date-time is shown in a friendly form.
+ */
+function formatWhen(when: string): string {
+  if (!when || when === "ASAP") return "As soon as possible";
+  const parsed = new Date(when);
+  if (Number.isNaN(parsed.getTime())) return when;
+  return parsed.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 const FLOWS = {
   ride: {
     prefix: "RQ",
@@ -21,13 +38,18 @@ const FLOWS = {
   meal: {
     prefix: "MD",
     heading: "Meal requested",
-    lede: "Your meal will arrive between 5–6 PM.",
+    lede: "We'll confirm your delivery time shortly.",
     tint: "var(--color-accent-2-100)",
     stroke: "var(--color-accent-2-700)",
     status: { label: "In progress", className: "tag tag-accent-2" },
     rows: (params: Record<string, string>) => [
       ["Delivery to", params.address],
-      ["Dietary", params.diet],
+      ["When", params.when ? formatWhen(params.when) : ""],
+      ["Dietary", params.diet ? params.diet.split(",").join(", ") : ""],
+      ["Cuisine", params.cuisine],
+      ["Allergies", params.allergies],
+      ["Phone", params.phone],
+      ["Instructions", params.instructions],
     ],
   },
   shelter: {

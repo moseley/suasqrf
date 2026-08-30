@@ -274,6 +274,37 @@ textarea.big-input { min-height: 72px; resize: vertical; }
 
 .summary-row { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
 
+/* — choice chips: tap-to-toggle dietary and single-select cuisine — */
+.chip-group { display: flex; flex-wrap: wrap; gap: 10px; }
+.chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 48px; padding: 12px 18px; font-size: 16px; line-height: 1;
+  color: var(--color-text); background: var(--color-surface);
+  border: 1px solid var(--color-divider); border-radius: 999px;
+  cursor: pointer; font-family: var(--font-body);
+}
+.chip:hover { background: var(--color-neutral-300); }
+.chip[aria-pressed="true"] {
+  background: var(--color-accent); color: var(--color-bg); border-color: var(--color-accent);
+}
+.chip:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* — the "allergies on file" read-only callout on the meal request — */
+.note-card {
+  background: var(--color-accent-100); border-radius: 18px; padding: 16px 18px;
+}
+.note-card .note-title {
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  color: var(--color-accent-800); font-size: 17px; margin-bottom: 2px;
+}
+
+/* — grouping heading inside a form (profile sections) — */
+.section-label {
+  font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  margin: var(--space-4) 0 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }

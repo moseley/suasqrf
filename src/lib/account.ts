@@ -9,6 +9,16 @@ export type Account = {
   phone?: string;
   /** Prefills the ride pickup and meal delivery fields. */
   homeAddress?: string;
+  // --- Profile fields (PRD-002). All optional, so an account written by the
+  // sign-in code alone stays valid and loads without migration. ---
+  /** Free text, e.g. "Peanuts, shellfish". Shown read-only on the meal request. */
+  allergies?: string;
+  /** e.g. ["Diabetic-friendly", "Halal"]. Prefills the meal dietary chips. */
+  dietaryRestrictions?: string[];
+  /** e.g. "Mediterranean". Prefills the meal cuisine chooser. */
+  cuisinePreference?: string;
+  /** Always false in this phase — the VA connector is a placeholder. */
+  vaConnected?: boolean;
   isMock: boolean;
 };
 
@@ -20,6 +30,10 @@ export const MOCK_ACCOUNT: Account = {
   email: "m.reyes@example.com",
   phone: MOCK_PHONE,
   homeAddress: "855 Maude Ave, Mountain View, CA 94043",
+  allergies: "Peanuts, shellfish",
+  dietaryRestrictions: ["Diabetic-friendly"],
+  cuisinePreference: "Mediterranean",
+  vaConnected: false,
   isMock: true,
 };
 
