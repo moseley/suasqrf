@@ -4,10 +4,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Screen, ScreenHeader } from "@/components/screen";
 import { ChipGroup } from "@/components/chips";
-import { ShieldCheck } from "@/components/icons";
 import { clearAccount, saveAccount, type Account } from "@/lib/account";
 import { useAccount } from "@/lib/use-account";
-import { ALLERGENS, CUISINES, DIETARY_RESTRICTIONS } from "@/lib/meal-options";
+import { ALLERGENS } from "@/lib/meal-options";
 import { nextPhoneValue } from "@/lib/phone";
 
 const SECTION_LABEL: React.CSSProperties = {
@@ -32,8 +31,6 @@ export default function Page() {
   // free-text "other" field. Both feed the one stored allergies list.
   const [allergenChips, setAllergenChips] = useState<string[]>([]);
   const [otherAllergies, setOtherAllergies] = useState("");
-  const [diets, setDiets] = useState<string[]>([]);
-  const [cuisine, setCuisine] = useState("");
 
   // Populate from the stored account once it is read (null on the server and
   // first client render, so the shell stays hydration-safe).
@@ -48,8 +45,6 @@ export default function Page() {
     const known = ALLERGENS as readonly string[];
     setAllergenChips(storedAllergies.filter((entry) => known.includes(entry)));
     setOtherAllergies(storedAllergies.filter((entry) => !known.includes(entry)).join(", "));
-    setDiets(account.dietaryRestrictions ?? []);
-    setCuisine(account.cuisinePreference ?? "");
     setSeeded(true);
   }, [account, seeded]);
 
@@ -75,11 +70,9 @@ export default function Page() {
       phone: phone.trim() || undefined,
       homeAddress: homeAddress.trim() || undefined,
       allergies: [...allergenChips, ...custom],
-      dietaryRestrictions: diets,
-      cuisinePreference: cuisine || undefined,
     });
     setSaved(true);
-  }, [seeded, account, name, phone, email, homeAddress, allergenChips, otherAllergies, diets, cuisine]);
+  }, [seeded, account, name, phone, email, homeAddress, allergenChips, otherAllergies]);
 
   function toggle(list: string[], setList: (next: string[]) => void, option: string) {
     setList(list.includes(option) ? list.filter((value) => value !== option) : [...list, option]);
@@ -150,7 +143,7 @@ export default function Page() {
         />
       </div>
 
-      <p style={SECTION_LABEL}>Health &amp; dietary</p>
+      <p style={SECTION_LABEL}>Health</p>
 
       <div className="big-field">
         <label>Allergies</label>
@@ -170,48 +163,6 @@ export default function Page() {
         <p className="text-muted" style={{ fontSize: 13, margin: "8px 0 0" }}>
           Not listed above? Add it here, separating each with a comma.
         </p>
-      </div>
-
-      <div className="big-field">
-        <label>Dietary restrictions</label>
-        <ChipGroup
-          options={DIETARY_RESTRICTIONS}
-          isSelected={(option) => diets.includes(option)}
-          onToggle={(option) => toggle(diets, setDiets, option)}
-        />
-      </div>
-
-      <p style={SECTION_LABEL}>Food preferences</p>
-
-      <div className="big-field">
-        <label>Preferred cuisine</label>
-        <ChipGroup
-          options={CUISINES}
-          isSelected={(option) => cuisine === option}
-          onToggle={(option) => setCuisine((current) => (current === option ? "" : option))}
-        />
-      </div>
-
-      <div className="card" style={{ background: "var(--color-surface)", gap: 10, marginTop: 4 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div
-            className="icon-circle"
-            style={{ width: 40, height: 40, background: "var(--color-accent-100)" }}
-          >
-            <ShieldCheck size={20} color="var(--color-accent-700)" />
-          </div>
-          <h4 style={{ margin: 0 }}>Connect to the VA</h4>
-          <span className="tag tag-outline" style={{ fontSize: 10 }}>
-            Coming soon
-          </span>
-        </div>
-        <p className="text-muted" style={{ fontSize: 14, margin: 0 }}>
-          Once connected, your identity, service history, allergies, and eligibility will
-          sync automatically from the VA, so you will not have to enter them here.
-        </p>
-        <button className="big-btn big-btn-secondary" type="button" disabled>
-          Connect to VA
-        </button>
       </div>
 
       <div className="grow" />
