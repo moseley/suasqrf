@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Screen, ScreenHeader } from "@/components/screen";
 import { ChipGroup } from "@/components/chips";
 import { Check } from "@/components/icons";
+import { AddressField, type Coords } from "@/components/address-field";
 import { useAccount } from "@/lib/use-account";
 import { ALLERGENS } from "@/lib/meal-options";
 import { nextPhoneValue, phoneDigits } from "@/lib/phone";
@@ -16,6 +17,7 @@ export default function Page() {
   const { account } = useAccount();
 
   const [address, setAddress] = useState("");
+  const [addressCoords, setAddressCoords] = useState<Coords | null>(null);
 
   // Allergies stay tucked away until the veteran opts in, so the common
   // request is short.
@@ -82,6 +84,7 @@ export default function Page() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           address: address.trim(),
+          ...(addressCoords ?? {}),
           allergies: hasDietary ? allergies : [],
           name: account?.name,
         }),
@@ -119,29 +122,18 @@ export default function Page() {
 
       <h2 style={{ margin: 0 }}>Request a meal delivery</h2>
 
-      <div className="big-field">
-        <label>Delivery address</label>
-
-        <input
-          id="address"
-          className="big-input"
-          value={address}
-          onChange={(event) => {
-            setAddress(event.target.value);
-            setAddressTouched(true);
-          }}
-          onBlur={() => setAddressTouched(true)}
-          placeholder="Street address"
-          aria-invalid={addressError}
-          style={addressError ? { borderColor: "var(--color-danger)" } : undefined}
-        />
-
-        {addressError ? (
-          <p style={{ fontSize: 14, color: "var(--color-danger)", margin: "8px 0 0" }}>
-            Enter a delivery address so we know where to send the meal.
-          </p>
-        ) : null}
-      </div>
+      <AddressField
+        id="address"
+        label="Delivery address"
+        value={address}
+        onChange={(next, coords) => {
+          setAddress(next);
+          setAddressCoords(coords);
+          setAddressTouched(true);
+        }}
+        invalid={addressError}
+        errorText="Enter a delivery address so we know where to send the meal."
+      />
 
       <label className="big-check" style={{ alignItems: "center" }}>
         <input

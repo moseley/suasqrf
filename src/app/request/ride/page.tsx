@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { Screen, ScreenHeader } from "@/components/screen";
 import { Check } from "@/components/icons";
+import { AddressField, type Coords } from "@/components/address-field";
 import { useAccount } from "@/lib/use-account";
 
 /** Kept in step with PROVIDER_NAME in src/lib/veteran-rides.ts. */
@@ -15,6 +16,7 @@ function RideForm() {
   const params = useSearchParams();
   const { account } = useAccount();
   const [pickup, setPickup] = useState("");
+  const [pickupCoords, setPickupCoords] = useState<Coords | null>(null);
   const [dropoff, setDropoff] = useState("");
   const [veteranDriver, setVeteranDriver] = useState(false);
 
@@ -64,6 +66,7 @@ function RideForm() {
             phoneNumber: account?.phone ?? "+15555555555",
           },
           pickupAddress: pickup,
+          ...(pickupCoords ? { pickup: pickupCoords } : {}),
           dropoffAddress: dropoff,
           veteranDriver,
         }),
@@ -90,16 +93,15 @@ function RideForm() {
 
       <h2 style={{ margin: 0 }}>Request a ride</h2>
 
-      <div className="big-field">
-        <label htmlFor="pickup">Pickup location</label>
-        <input
-          id="pickup"
-          className="big-input"
-          value={pickup}
-          onChange={(event) => setPickup(event.target.value)}
-          placeholder="Street address"
-        />
-      </div>
+      <AddressField
+        id="pickup"
+        label="Pickup location"
+        value={pickup}
+        onChange={(next, coords) => {
+          setPickup(next);
+          setPickupCoords(coords);
+        }}
+      />
 
       <div className="big-field">
         <label htmlFor="dropoff">Where are you going?</label>

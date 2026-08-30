@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Screen, ScreenHeader } from "@/components/screen";
 import { Check } from "@/components/icons";
+import { AddressField, type Coords } from "@/components/address-field";
 import { useAccount } from "@/lib/use-account";
 
 type Hotel = {
@@ -30,11 +31,10 @@ export default function Page() {
 
   const [location, setLocation] = useState("");
   const [people, setPeople] = useState("1");
-  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [coords, setCoords] = useState<Coords | null>(null);
 
   const [stage, setStage] = useState<Stage>("form");
   const [busy, setBusy] = useState(false);
-  const [locating, setLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [hotels, setHotels] = useState<Hotel[]>([]);
@@ -57,48 +57,6 @@ export default function Page() {
     const params = new URLSearchParams({ location: location || "Current location", people });
     if (note) params.set("note", note);
     router.push(`/confirmation/shelter?${params}`);
-  }
-
-  /** Asks the browser where the veteran is, so they need not type an address. */
-  function useCurrentLocation() {
-    if (!("geolocation" in navigator)) {
-      setError("This device cannot share a location. Type an address instead.");
-      return;
-    }
-
-    // Geolocation is refused outright off HTTPS, with a bare permission error
-    // that would otherwise look like the veteran declined.
-    if (!window.isSecureContext) {
-      setError("Location needs a secure (https) connection. Type an address instead.");
-      return;
-    }
-
-    setLocating(true);
-    setError(null);
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setCoords({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        });
-        setLocation("");
-        setLocating(false);
-      },
-      (failure) => {
-        // Each cause needs different advice; one message for all three leaves
-        // someone retrying a button that will never work.
-        setError(
-          failure.code === failure.PERMISSION_DENIED
-            ? "Location is blocked for this site. Allow it in your browser settings, or type an address."
-            : failure.code === failure.TIMEOUT
-              ? "Finding your location took too long. Try again, or type an address."
-              : "Your location is unavailable right now. Type an address instead.",
-        );
-        setLocating(false);
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
-    );
   }
 
   async function search() {
@@ -310,50 +268,16 @@ export default function Page() {
 
       <h2 style={{ margin: 0 }}>Request emergency shelter</h2>
 
-      <div className="big-field">
-        <label htmlFor="location">Current location</label>
-
-        {coords ? (
-          <div
-            className="card elev-sm"
-            style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
-          >
-            <Check size={20} color="var(--color-accent-2-700)" />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 16 }}>Using your current location</div>
-              <div className="text-muted" style={{ fontSize: 13 }}>
-                {coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}
-              </div>
-            </div>
-            <button
-              className="btn btn-ghost"
-              type="button"
-              onClick={() => setCoords(null)}
-            >
-              Change
-            </button>
-          </div>
-        ) : (
-          <>
-            <input
-              id="location"
-              className="big-input"
-              value={location}
-              onChange={(event) => setLocation(event.target.value)}
-              placeholder="Cross streets or address"
-            />
-            <button
-              className="btn btn-ghost"
-              type="button"
-              style={{ marginTop: 8, fontSize: 15 }}
-              disabled={locating}
-              onClick={useCurrentLocation}
-            >
-              {locating ? "Finding you…" : "Use my current location"}
-            </button>
-          </>
-        )}
-      </div>
+      <AddressField
+        id="location"
+        label="Current location"
+        value={location}
+        onChange={(next, nextCoords) => {
+          setLocation(next);
+          setCoords(nextCoords);
+        }}
+        placeholder="Cross streets or address"
+      />
 
       <div className="big-field">
         <label htmlFor="people">How many people need shelter?</label>
