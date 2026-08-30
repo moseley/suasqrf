@@ -1,7 +1,15 @@
 import "server-only";
 
 import { createMockProvider } from "./mock-trips";
+import { getRoute } from "./route";
 import type { Trip, TripRequest, TripStatus } from "./uber-rides";
+import {
+  decodeTripPayload,
+  encodeTripPayload,
+  packPoint,
+  unpackPoint,
+  type PackedPoint,
+} from "./trip-id";
 
 /**
  * Veterans To Veterans — the local ride service used when a rider asks for a
@@ -74,12 +82,22 @@ function addressWithoutZip(address: string | undefined): string {
 }
 
 /**
- * The API reports a match and a booking state but issues no id of its own and
- * exposes no read endpoint, so the trip is held here against the
- * Idempotency-Key we sent. It therefore does not change after booking — the
- * status screen shows what was recorded at match time and nothing more.
+ * The API exposes no read endpoint for a booking, so the match is carried in
+ * the id rather than held in memory: a module-level map is lost whenever a
+ * different instance serves the poll, which reported the trip as unknown.
+ *
+ * It follows that the trip does not change after booking — the status screen
+ * shows what was recorded at match time and nothing more.
  */
-const booked = new Map<string, Trip>();
+type Packed = {
+  st: TripStatus;
+  /** Matched veteran, absent when nobody was available. */
+  n?: string;
+  c?: string;
+  l?: string;
+  p: PackedPoint;
+  o: PackedPoint;
+};
 
 type RideResponse = {
   status?: string;
@@ -153,28 +171,49 @@ export async function createTrip(request: TripRequest): Promise<Trip> {
   const body = (await response.json()) as RideResponse;
   const status = statusFrom(body);
 
-  const trip: Trip = {
-    requestId: tag(idempotencyKey),
+  const packed: Packed = {
+    st: status,
+    ...(body.veteran?.name ? { n: body.veteran.name } : {}),
+    ...(body.veteran?.carModel ? { c: body.veteran.carModel } : {}),
+    ...(body.veteran?.licensePlate ? { l: body.veteran.licensePlate } : {}),
+    p: packPoint(request.pickup),
+    o: packPoint(request.dropoff),
+  };
+
+  return {
+    requestId: tag(encodeTripPayload(packed)),
     status,
     provider: PROVIDER_NAME,
     pickup: request.pickup,
     dropoff: request.dropoff,
+    route: (await getRoute(request.pickup, request.dropoff)) ?? undefined,
     // Only present once a veteran is actually matched.
     driver: body.veteran?.name ? { name: body.veteran.name } : undefined,
     vehicle: body.veteran?.carModel
       ? { model: body.veteran.carModel, licensePlate: body.veteran.licensePlate }
       : undefined,
   };
-
-  booked.set(idempotencyKey, trip);
-  return trip;
 }
 
 export async function getTrip(requestId: string): Promise<Trip | null> {
   const config = getConfig();
   if (!config) return fallback.get(requestId);
 
-  return booked.get(untag(requestId)) ?? null;
+  const packed = decodeTripPayload<Packed>(untag(requestId));
+  const pickup = unpackPoint(packed?.p);
+  const dropoff = unpackPoint(packed?.o);
+  if (!packed || !pickup || !dropoff) return null;
+
+  return {
+    requestId,
+    status: packed.st,
+    provider: PROVIDER_NAME,
+    pickup,
+    dropoff,
+    route: (await getRoute(pickup, dropoff)) ?? undefined,
+    driver: packed.n ? { name: packed.n } : undefined,
+    vehicle: packed.c ? { model: packed.c, licensePlate: packed.l } : undefined,
+  };
 }
 
 /** Sandbox stepping, available only against the stand-in. */

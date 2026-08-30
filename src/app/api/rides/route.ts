@@ -194,7 +194,7 @@ export async function GET(request: Request) {
   }
 
   if (!config) {
-    const trip = getMockTrip(requestId);
+    const trip = await getMockTrip(requestId);
     if (!trip) return NextResponse.json({ error: "Unknown trip." }, { status: 404 });
     return NextResponse.json({ configured: true, sandbox: true, mock: true, ...trip });
   }

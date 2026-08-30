@@ -2,6 +2,13 @@ import "server-only";
 
 import type { LatLng, Trip, TripRequest, TripStatus } from "./uber-rides";
 import { getRoute, pointAlong } from "./route";
+import {
+  decodeTripPayload,
+  encodeTripPayload,
+  packPoint,
+  unpackPoint,
+  type PackedPoint,
+} from "./trip-id";
 
 /**
  * Shared in-memory trip simulation.
@@ -140,9 +147,21 @@ export type MockProvider = {
   prefix: string;
   owns: (requestId: string) => boolean;
   create: (request: TripRequest) => Promise<Trip>;
-  get: (requestId: string) => Trip | null;
-  setStatus: (requestId: string, status: TripStatus) => Trip | null;
-  resume: (requestId: string) => Trip | null;
+  get: (requestId: string) => Promise<Trip | null>;
+  setStatus: (requestId: string, status: TripStatus) => Promise<Trip | null>;
+  resume: (requestId: string) => Promise<Trip | null>;
+};
+
+/** What the id carries, so a trip can be rebuilt on any instance. */
+type Packed = {
+  /** Booked-at, epoch ms. */
+  t: number;
+  /** Index into the provider's driver fixtures. */
+  d: number;
+  /** Scheduled pickup, epoch ms. */
+  s?: number;
+  p: PackedPoint;
+  o: PackedPoint;
 };
 
 export function createMockProvider(options: {
@@ -151,7 +170,29 @@ export function createMockProvider(options: {
   /** Shown on the trip screen so the rider knows who is coming. */
   provider?: string;
 }): MockProvider {
-  const trips = new Map<string, MockTrip>();
+  /** Pinned statuses only. Stepping is a local development control. */
+  const pinned = new Map<string, TripStatus>();
+  let issued = 0;
+
+  async function rebuild(requestId: string): Promise<MockTrip | null> {
+    const packed = decodeTripPayload<Packed>(requestId.slice(options.prefix.length + 1));
+    const pickup = unpackPoint(packed?.p);
+    const dropoff = unpackPoint(packed?.o);
+    if (!packed || !pickup || !dropoff) return null;
+
+    return {
+      requestId,
+      bookedAt: packed.t,
+      pickup,
+      dropoff,
+      driver: options.drivers[packed.d % options.drivers.length],
+      // Cached per pair, so this is one lookup per instance, not per poll.
+      route: await getRoute(pickup, dropoff),
+      scheduledFor: packed.s,
+      provider: options.provider,
+      pinned: pinned.get(requestId),
+    };
+  }
 
   return {
     prefix: options.prefix,
@@ -159,41 +200,46 @@ export function createMockProvider(options: {
     owns: (requestId) => requestId.startsWith(`${options.prefix}-`),
 
     async create(request) {
-      const driver = options.drivers[trips.size % options.drivers.length];
+      const driverIndex = issued++ % options.drivers.length;
+      const packed: Packed = {
+        t: Date.now(),
+        d: driverIndex,
+        p: packPoint(request.pickup),
+        o: packPoint(request.dropoff),
+        ...(request.pickupTimeMs ? { s: request.pickupTimeMs } : {}),
+      };
+
       const trip: MockTrip = {
-        requestId: `${options.prefix}-${Math.random().toString(36).slice(2, 10)}`,
-        bookedAt: Date.now(),
+        requestId: `${options.prefix}-${encodeTripPayload(packed)}`,
+        bookedAt: packed.t,
         pickup: request.pickup,
         dropoff: request.dropoff,
-        driver,
+        driver: options.drivers[driverIndex],
         // Looked up once here rather than on every poll.
         route: await getRoute(request.pickup, request.dropoff),
         scheduledFor: request.pickupTimeMs,
         provider: options.provider,
       };
-      trips.set(trip.requestId, trip);
       return toTrip(trip);
     },
 
-    get(requestId) {
-      const trip = trips.get(requestId);
+    async get(requestId) {
+      const trip = await rebuild(requestId);
       return trip ? toTrip(trip) : null;
     },
 
     /** Pins the trip to a state instead of letting the clock advance it. */
-    setStatus(requestId, status) {
-      const trip = trips.get(requestId);
-      if (!trip) return null;
-      trip.pinned = status;
-      return toTrip(trip);
+    async setStatus(requestId, status) {
+      pinned.set(requestId, status);
+      const trip = await rebuild(requestId);
+      return trip ? toTrip(trip) : null;
     },
 
     /** Lets the clock take over again from where it would have been. */
-    resume(requestId) {
-      const trip = trips.get(requestId);
-      if (!trip) return null;
-      delete trip.pinned;
-      return toTrip(trip);
+    async resume(requestId) {
+      pinned.delete(requestId);
+      const trip = await rebuild(requestId);
+      return trip ? toTrip(trip) : null;
     },
   };
 }

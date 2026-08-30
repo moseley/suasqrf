@@ -59,7 +59,7 @@ export async function POST(request: Request) {
     }
 
     if (resume === true) {
-      const trip = resumeTrip(requestId);
+      const trip = await resumeTrip(requestId);
       if (!trip) return NextResponse.json({ error: "Unknown trip." }, { status: 404 });
       return NextResponse.json({ mock: true, ...trip });
     }
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const trip = setStatus(requestId, AS_STATUS[state as DriverState]);
+    const trip = await setStatus(requestId, AS_STATUS[state as DriverState]);
     if (!trip) return NextResponse.json({ error: "Unknown trip." }, { status: 404 });
     return NextResponse.json({ mock: true, ...trip });
   }
