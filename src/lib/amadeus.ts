@@ -147,3 +147,180 @@ export async function findHotelsNear(
     return { configured: true, hotels: [] };
   }
 }
+
+/* ── Offers and booking ─────────────────────────────────────────────────── */
+
+export type Offer = {
+  offerId: string;
+  hotelId: string;
+  hotelName: string;
+  checkInDate: string;
+  checkOutDate: string;
+  roomDescription?: string;
+  price?: { total: string; currency: string };
+};
+
+type OffersResponse = {
+  data?: Array<{
+    hotel?: { hotelId: string; name: string };
+    available?: boolean;
+    offers?: Array<{
+      id: string;
+      checkInDate: string;
+      checkOutDate: string;
+      room?: { description?: { text?: string } };
+      price?: { total?: string; currency?: string };
+    }>;
+  }>;
+};
+
+/** Tonight: check in today, out tomorrow. */
+export function tonight(): { checkInDate: string; checkOutDate: string } {
+  const day = 24 * 60 * 60 * 1000;
+  const iso = (date: Date) => date.toISOString().slice(0, 10);
+  return { checkInDate: iso(new Date()), checkOutDate: iso(new Date(Date.now() + day)) };
+}
+
+/**
+ * Bookable offers for the given hotels tonight. Test-environment coverage is
+ * patchy, so an empty result is normal and not an error.
+ */
+export async function findOffers(hotelIds: string[], adults = 1): Promise<Offer[]> {
+  const config = getAmadeusConfig();
+  if (!config || hotelIds.length === 0) return [];
+
+  const { checkInDate, checkOutDate } = tonight();
+
+  try {
+    const token = await getAccessToken(config);
+    const query = new URLSearchParams({
+      hotelIds: hotelIds.slice(0, 20).join(","),
+      adults: String(adults),
+      checkInDate,
+      checkOutDate,
+    });
+
+    const response = await fetch(`${baseUrl(config)}/v3/shopping/hotel-offers?${query}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      console.error("Amadeus offers failed", response.status, await response.text());
+      return [];
+    }
+
+    const body = (await response.json()) as OffersResponse;
+
+    return (body.data ?? [])
+      .filter((entry) => entry.available !== false)
+      .flatMap((entry) =>
+        (entry.offers ?? []).map((offer) => ({
+          offerId: offer.id,
+          hotelId: entry.hotel?.hotelId ?? "",
+          hotelName: entry.hotel?.name ?? "",
+          checkInDate: offer.checkInDate,
+          checkOutDate: offer.checkOutDate,
+          roomDescription: offer.room?.description?.text,
+          price:
+            offer.price?.total && offer.price.currency
+              ? { total: offer.price.total, currency: offer.price.currency }
+              : undefined,
+        })),
+      );
+  } catch (error) {
+    console.error("Amadeus offers error", error);
+    return [];
+  }
+}
+
+export type Guest = { firstName: string; lastName: string; phone: string; email: string };
+
+export type BookingResult =
+  | { booked: true; confirmationNumber: string; sample?: boolean }
+  | { booked: false; reason: string };
+
+/**
+ * Payment for a real booking. Amadeus requires a card even in the test
+ * environment, so card details are read from the environment and are never
+ * committed. Without them, booking is refused rather than faked.
+ */
+function paymentFromEnv(): Record<string, unknown> | null {
+  const vendorCode = process.env.AMADEUS_PAYMENT_VENDOR;
+  const cardNumber = process.env.AMADEUS_PAYMENT_CARD;
+  const expiryDate = process.env.AMADEUS_PAYMENT_EXPIRY;
+  const holderName = process.env.AMADEUS_PAYMENT_HOLDER;
+  if (!vendorCode || !cardNumber || !expiryDate || !holderName) return null;
+
+  return {
+    method: "CREDIT_CARD",
+    paymentCard: {
+      paymentCardInfo: { vendorCode, cardNumber, expiryDate, holderName },
+    },
+  };
+}
+
+/**
+ * Books one offer. Returns a refusal rather than throwing, so a shelter
+ * request can always fall through to human coordination.
+ */
+export async function bookOffer(offerId: string, guest: Guest): Promise<BookingResult> {
+  const config = getAmadeusConfig();
+
+  if (!config) {
+    // Clearly marked so no surface can present this as a real reservation.
+    return { booked: true, confirmationNumber: `SAMPLE-${offerId.slice(-6)}`, sample: true };
+  }
+
+  const payment = paymentFromEnv();
+  if (!payment) {
+    return { booked: false, reason: "Payment is not configured for hotel booking." };
+  }
+
+  try {
+    const token = await getAccessToken(config);
+
+    const response = await fetch(`${baseUrl(config)}/v2/booking/hotel-orders`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        data: {
+          type: "hotel-order",
+          guests: [
+            {
+              tid: 1,
+              title: "MR",
+              firstName: guest.firstName,
+              lastName: guest.lastName,
+              phone: guest.phone,
+              email: guest.email,
+            },
+          ],
+          travelAgent: { contact: { email: guest.email } },
+          roomAssociations: [
+            { guestReferences: [{ guestReference: "1" }], hotelOfferId: offerId },
+          ],
+          payment,
+        },
+      }),
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      const detail = await response.text();
+      console.error("Amadeus booking failed", response.status, detail);
+      return { booked: false, reason: "The room could not be booked." };
+    }
+
+    const body = (await response.json()) as {
+      data?: { id?: string; associatedRecords?: Array<{ reference?: string }> };
+    };
+
+    const reference =
+      body.data?.associatedRecords?.[0]?.reference ?? body.data?.id ?? "CONFIRMED";
+    return { booked: true, confirmationNumber: reference };
+  } catch (error) {
+    console.error("Amadeus booking error", error);
+    return { booked: false, reason: "The room could not be booked." };
+  }
+}

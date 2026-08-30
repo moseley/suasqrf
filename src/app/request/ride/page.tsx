@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { Screen, ScreenHeader } from "@/components/screen";
 import { Check } from "@/components/icons";
 import { useAccount } from "@/lib/use-account";
@@ -10,8 +10,9 @@ import { useAccount } from "@/lib/use-account";
 const VETERAN_SERVICE = "Veterans To Veterans";
 
 /** Ride flow, step B — Request a ride. Pickup is always as soon as possible. */
-export default function Page() {
+function RideForm() {
   const router = useRouter();
+  const params = useSearchParams();
   const { account } = useAccount();
   const [pickup, setPickup] = useState("");
   const [dropoff, setDropoff] = useState("");
@@ -20,14 +21,27 @@ export default function Page() {
   const [booking, setBooking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Seed the pickup from the saved address once, leaving later edits alone.
+  // Seed once, leaving later edits alone. A handoff from another flow (a
+  // booked shelter room, say) wins over the saved home address.
   const [seeded, setSeeded] = useState(false);
   useEffect(() => {
-    if (!seeded && account?.homeAddress) {
+    if (seeded) return;
+
+    const fromQuery = params.get("pickup");
+    const toQuery = params.get("dropoff");
+
+    if (fromQuery || toQuery) {
+      if (fromQuery) setPickup(fromQuery);
+      if (toQuery) setDropoff(toQuery);
+      setSeeded(true);
+      return;
+    }
+
+    if (account?.homeAddress) {
       setPickup(account.homeAddress);
       setSeeded(true);
     }
-  }, [account, seeded]);
+  }, [account, params, seeded]);
 
   /**
    * Addresses go to the server as text; it geocodes them, so no maps key is
@@ -130,5 +144,14 @@ export default function Page() {
         {booking ? "Requesting…" : "Request Ride"}
       </button>
     </Screen>
+  );
+}
+
+/** useSearchParams needs a boundary for the shell to prerender. */
+export default function Page() {
+  return (
+    <Suspense fallback={<Screen><ScreenHeader back="/home" /></Screen>}>
+      <RideForm />
+    </Suspense>
   );
 }

@@ -17,12 +17,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const { location } = (payload ?? {}) as Record<string, unknown>;
-  if (typeof location !== "string" || location.trim() === "") {
-    return NextResponse.json({ error: "A location is required." }, { status: 400 });
+  const { location, latitude, longitude } = (payload ?? {}) as Record<string, unknown>;
+
+  // The browser may send its own coordinates; otherwise geocode the text.
+  let point: { latitude: number; longitude: number; address: string } | null = null;
+
+  if (typeof latitude === "number" && typeof longitude === "number") {
+    point = {
+      latitude,
+      longitude,
+      address: typeof location === "string" && location.trim() !== "" ? location : "Current location",
+    };
+  } else if (typeof location === "string" && location.trim() !== "") {
+    point = await geocode(location);
   }
 
-  const point = await geocode(location);
   if (!point) {
     return NextResponse.json(
       { error: "Could not resolve that location.", field: "location" },
