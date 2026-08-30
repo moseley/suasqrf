@@ -33,11 +33,19 @@ function safeDecode(value: string): string {
   }
 }
 
-/** Coordinates win when both are supplied; otherwise the address is geocoded. */
+/**
+ * Coordinates win when both are supplied; otherwise the address is geocoded.
+ *
+ * The text is kept either way. A caller that sends coordinates — the ride form
+ * does, once a suggestion is picked — would otherwise leave the address blank,
+ * and a provider that requires one rejects the whole request.
+ */
 async function resolve(point: unknown, address: unknown): Promise<LatLng | null> {
-  if (isLatLng(point)) return point;
-  if (typeof address !== "string" || address.trim() === "") return null;
-  return geocode(address);
+  const text = typeof address === "string" && address.trim() !== "" ? address.trim() : undefined;
+
+  if (isLatLng(point)) return { ...point, address: point.address ?? text };
+  if (!text) return null;
+  return geocode(text);
 }
 
 export async function POST(request: Request) {
