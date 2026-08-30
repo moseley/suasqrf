@@ -172,6 +172,9 @@ export function AddressField({
           setGeoError(null);
         }}
         placeholder={placeholder}
+        // Browser autofill opens its own dropdown over ours, so it is off
+        // wherever we suggest. Elsewhere a saved address is genuinely useful.
+        autoComplete={suggestNear ? "off" : "street-address"}
         aria-invalid={invalid}
         style={invalid ? { borderColor: "var(--color-danger)" } : undefined}
       />
