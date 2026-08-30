@@ -6,6 +6,7 @@ import { Screen } from "@/components/screen";
 import { Check, ShieldCheck } from "@/components/icons";
 import { MOCK_ACCOUNT, MOCK_PHONE, isMockPhone, saveAccount } from "@/lib/account";
 import { requestCode, verifyCode } from "@/app/actions/signin";
+import { nextPhoneValue, toE164 } from "@/lib/phone";
 
 type Mode = "register" | "signin";
 
@@ -62,7 +63,8 @@ export default function Page() {
     setError(null);
 
     try {
-      const result = await requestCode(contact.trim(), channel);
+      const destination = channel === "phone" ? toE164(contact) : contact.trim();
+      const result = await requestCode(destination, channel);
 
       if (!result.ok) {
         setError(result.error);
@@ -86,7 +88,8 @@ export default function Page() {
     setError(null);
 
     try {
-      const result = await verifyCode(contact.trim(), code);
+      const destination = channel === "phone" ? toE164(contact) : contact.trim();
+      const result = await verifyCode(destination, code);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -264,7 +267,14 @@ export default function Page() {
           autoComplete={channel === "email" ? "email" : "tel"}
           placeholder={channel === "email" ? "you@example.com" : "(555) 555-0123"}
           value={contact}
-          onChange={(event) => setContact(event.target.value)}
+          maxLength={channel === "phone" ? 14 : undefined}
+          onChange={(event) =>
+            setContact(
+              channel === "phone"
+                ? nextPhoneValue(event.target.value, contact)
+                : event.target.value,
+            )
+          }
         />
       </div>
 
