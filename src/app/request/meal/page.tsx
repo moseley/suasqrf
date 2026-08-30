@@ -6,7 +6,7 @@ import { Screen, ScreenHeader } from "@/components/screen";
 import { ChipGroup } from "@/components/chips";
 import { Check, Home as HomeIcon } from "@/components/icons";
 import { useAccount } from "@/lib/use-account";
-import { CUISINES, DIETARY_RESTRICTIONS } from "@/lib/meal-options";
+import { ALLERGENS } from "@/lib/meal-options";
 import { nextPhoneValue, phoneDigits } from "@/lib/phone";
 
 type Coords = { latitude: number; longitude: number };
@@ -21,26 +21,24 @@ export default function Page() {
   const [locating, setLocating] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
 
-  // Allergies and preferences stay tucked away until the veteran opts in, so
-  // the common request is short.
+  // Allergies stay tucked away until the veteran opts in, so the common
+  // request is short.
   const [hasDietary, setHasDietary] = useState(false);
-  const [diets, setDiets] = useState<string[]>([]);
-  const [cuisine, setCuisine] = useState("");
+  const [allergies, setAllergies] = useState<string[]>([]);
 
   const [phone, setPhone] = useState("");
   const [instructions, setInstructions] = useState("");
 
   // Seed the fields we already know once, then leave edits alone. When the
-  // profile carries allergies or preferences, open that section so the
-  // prefill is visible rather than hidden behind an unchecked box.
+  // profile carries allergies, open that section so the prefill is visible
+  // rather than hidden behind an unchecked box.
   const [seeded, setSeeded] = useState(false);
   useEffect(() => {
     if (seeded || !account) return;
     if (account.homeAddress) setAddress(account.homeAddress);
     if (account.phone) setPhone(account.phone);
-    if (account.dietaryRestrictions?.length) setDiets(account.dietaryRestrictions);
-    if (account.cuisinePreference) setCuisine(account.cuisinePreference);
-    if (account.allergies?.length || account.dietaryRestrictions?.length || account.cuisinePreference) {
+    if (account.allergies?.length) {
+      setAllergies(account.allergies);
       setHasDietary(true);
     }
     setSeeded(true);
@@ -88,13 +86,20 @@ export default function Page() {
     );
   }
 
-  function toggleDiet(option: string) {
-    setDiets((current) =>
+  function toggleAllergy(option: string) {
+    setAllergies((current) =>
       current.includes(option)
         ? current.filter((value) => value !== option)
         : [...current, option],
     );
   }
+
+  // Anything stored on the profile that is not a known allergen still needs a
+  // chip, or a veteran would silently lose it from this request.
+  const allergenOptions = [
+    ...ALLERGENS,
+    ...allergies.filter((entry) => !(ALLERGENS as readonly string[]).includes(entry)),
+  ];
 
   // Address and a complete phone number are both required. Errors surface once
   // a field has been touched, so the prefilled defaults never nag on load.
@@ -112,9 +117,7 @@ export default function Page() {
     const params = new URLSearchParams();
     params.set("address", deliveryAddress);
     if (hasDietary) {
-      if (diets.length) params.set("diet", diets.join(","));
-      if (cuisine) params.set("cuisine", cuisine);
-      if (account?.allergies?.length) params.set("allergies", account.allergies.join(", "));
+      if (allergies.length) params.set("allergies", allergies.join(", "));
     }
     if (phone.trim()) params.set("phone", phone.trim());
     if (instructions.trim()) params.set("instructions", instructions.trim());
@@ -205,47 +208,21 @@ export default function Page() {
         <span className="check-box">
           <Check size={16} />
         </span>
-        <span style={{ fontSize: 20, fontWeight: 700 }}>I have allergies or dietary needs</span>
+        <span style={{ fontSize: 20, fontWeight: 700 }}>I have allergies</span>
       </label>
 
       {hasDietary ? (
-        <>
-          {account?.allergies?.length ? (
-            <div className="card" style={{ background: "var(--color-accent-100)", gap: 2 }}>
-              <span
-                style={{
-                  fontFamily: "var(--font-heading)",
-                  color: "var(--color-accent-700)",
-                  fontSize: 18,
-                }}
-              >
-                Allergies on file
-              </span>
-              <span style={{ fontSize: 16 }}>{account.allergies.join(", ")}</span>
-            </div>
-          ) : null}
-
-          <div className="big-field">
-            <label>Dietary restrictions</label>
-            <ChipGroup
-              options={DIETARY_RESTRICTIONS}
-              isSelected={(option) => diets.includes(option)}
-              onToggle={toggleDiet}
-            />
-          </div>
-
-          <div className="big-field">
-            <label>Preferred cuisine</label>
-            <ChipGroup
-              options={CUISINES}
-              isSelected={(option) => cuisine === option}
-              onToggle={(option) => setCuisine((current) => (current === option ? "" : option))}
-            />
-            <p className="text-muted" style={{ fontSize: 13, margin: "10px 0 0" }}>
-              Your preferred cuisine is not guaranteed, but we prioritize it when matching a kitchen.
-            </p>
-          </div>
-        </>
+        <div className="big-field">
+          <label>Allergies</label>
+          <ChipGroup
+            options={allergenOptions}
+            isSelected={(option) => allergies.includes(option)}
+            onToggle={toggleAllergy}
+          />
+          <p className="text-muted" style={{ fontSize: 13, margin: "10px 0 0" }}>
+            Prefilled from your profile. Change it here for this delivery only.
+          </p>
+        </div>
       ) : null}
 
       <div className="big-field">
