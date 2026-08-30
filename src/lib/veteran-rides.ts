@@ -45,8 +45,19 @@ export function owns(requestId: string): boolean {
   return requestId.startsWith(`${PREFIX}-`) || requestId.startsWith(`${PREFIX}:`);
 }
 
+/**
+ * Hyphen, not a colon: the id travels in a URL path segment, and a colon gets
+ * percent-encoded there and re-encoded on the way back out, so the prefix
+ * stops matching and the lookup goes to the wrong provider.
+ */
 function tag(id: string): string {
-  return `${PREFIX}:${id}`;
+  return `${PREFIX}-${id}`;
+}
+
+function untag(requestId: string): string {
+  return requestId.startsWith(`${PREFIX}-`) || requestId.startsWith(`${PREFIX}:`)
+    ? requestId.slice(PREFIX.length + 1)
+    : requestId;
 }
 
 /** US five-digit ZIP out of a free-text address, when there is one. */
@@ -163,8 +174,7 @@ export async function getTrip(requestId: string): Promise<Trip | null> {
   const config = getConfig();
   if (!config) return fallback.get(requestId);
 
-  const key = requestId.startsWith(`${PREFIX}:`) ? requestId.slice(PREFIX.length + 1) : requestId;
-  return booked.get(key) ?? null;
+  return booked.get(untag(requestId)) ?? null;
 }
 
 /** Sandbox stepping, available only against the stand-in. */

@@ -24,6 +24,15 @@ function isLatLng(value: unknown): value is LatLng {
   return typeof point.latitude === "number" && typeof point.longitude === "number";
 }
 
+/** Percent-decodes when it can, leaving malformed input untouched. */
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 /** Coordinates win when both are supplied; otherwise the address is geocoded. */
 async function resolve(point: unknown, address: unknown): Promise<LatLng | null> {
   if (isLatLng(point)) return point;
@@ -158,7 +167,7 @@ export async function POST(request: Request) {
 /** GET /api/rides?requestId=... — the current recorded state of a trip. */
 export async function GET(request: Request) {
   const config = getRidesConfig();
-  const lookupId = new URL(request.url).searchParams.get("requestId") ?? "";
+  const lookupId = safeDecode(new URL(request.url).searchParams.get("requestId") ?? "");
   if (!config && !isMockEnabled() && !veteranRides.owns(lookupId)) {
     return NextResponse.json(
       { configured: false, reason: "Uber Guest Rides credentials are not set." },
@@ -166,7 +175,9 @@ export async function GET(request: Request) {
     );
   }
 
-  const requestId = new URL(request.url).searchParams.get("requestId");
+  const raw = new URL(request.url).searchParams.get("requestId");
+  // A caller that encodes an already-encoded id would otherwise miss entirely.
+  const requestId = raw?.includes("%") ? safeDecode(raw) : raw;
   if (!requestId) {
     return NextResponse.json({ error: "requestId is required." }, { status: 400 });
   }
