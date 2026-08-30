@@ -182,7 +182,9 @@ export function AddressField({
               <button type="button" className="suggest-item" onClick={() => choose(suggestion)}>
                 <span className="suggest-name">{suggestion.name}</span>
                 <span className="suggest-meta">
-                  {suggestion.distanceMiles} mi · {suggestion.address}
+                  <span className="suggest-distance">{suggestion.distanceMiles} mi</span>
+                  {" · "}
+                  {suggestion.address}
                 </span>
               </button>
             </li>
