@@ -28,7 +28,10 @@ export default function Page() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [homeAddress, setHomeAddress] = useState("");
-  const [allergies, setAllergies] = useState<string[]>([]);
+  // Known allergens are chips; anything else the veteran types goes in the
+  // free-text "other" field. Both feed the one stored allergies list.
+  const [allergenChips, setAllergenChips] = useState<string[]>([]);
+  const [otherAllergies, setOtherAllergies] = useState("");
   const [diets, setDiets] = useState<string[]>([]);
   const [cuisine, setCuisine] = useState("");
 
@@ -41,7 +44,10 @@ export default function Page() {
     setPhone(account.phone ?? "");
     setEmail(account.email ?? "");
     setHomeAddress(account.homeAddress ?? "");
-    setAllergies(account.allergies ?? []);
+    const storedAllergies = account.allergies ?? [];
+    const known = ALLERGENS as readonly string[];
+    setAllergenChips(storedAllergies.filter((entry) => known.includes(entry)));
+    setOtherAllergies(storedAllergies.filter((entry) => !known.includes(entry)).join(", "));
     setDiets(account.dietaryRestrictions ?? []);
     setCuisine(account.cuisinePreference ?? "");
     setSeeded(true);
@@ -54,6 +60,13 @@ export default function Page() {
   const [saved, setSaved] = useState(false);
   useEffect(() => {
     if (!seeded) return;
+    // Merge the chips and the free-text allergens into one list, dropping any
+    // typed entry that just repeats a chip.
+    const custom = otherAllergies
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+      .filter((entry) => !allergenChips.some((chip) => chip.toLowerCase() === entry.toLowerCase()));
     const base: Account = account ?? { name: "", isMock: false };
     saveAccount({
       ...base,
@@ -61,12 +74,12 @@ export default function Page() {
       email: email.trim() || undefined,
       phone: phone.trim() || undefined,
       homeAddress: homeAddress.trim() || undefined,
-      allergies,
+      allergies: [...allergenChips, ...custom],
       dietaryRestrictions: diets,
       cuisinePreference: cuisine || undefined,
     });
     setSaved(true);
-  }, [seeded, account, name, phone, email, homeAddress, allergies, diets, cuisine]);
+  }, [seeded, account, name, phone, email, homeAddress, allergenChips, otherAllergies, diets, cuisine]);
 
   function toggle(list: string[], setList: (next: string[]) => void, option: string) {
     setList(list.includes(option) ? list.filter((value) => value !== option) : [...list, option]);
@@ -143,9 +156,20 @@ export default function Page() {
         <label>Allergies</label>
         <ChipGroup
           options={ALLERGENS}
-          isSelected={(option) => allergies.includes(option)}
-          onToggle={(option) => toggle(allergies, setAllergies, option)}
+          isSelected={(option) => allergenChips.includes(option)}
+          onToggle={(option) => toggle(allergenChips, setAllergenChips, option)}
         />
+        <input
+          className="big-input"
+          value={otherAllergies}
+          onChange={(event) => setOtherAllergies(event.target.value)}
+          placeholder="Other allergies (e.g. Mustard, Sulfites)"
+          aria-label="Other allergies"
+          style={{ marginTop: 12 }}
+        />
+        <p className="text-muted" style={{ fontSize: 13, margin: "8px 0 0" }}>
+          Not listed above? Add it here, separating each with a comma.
+        </p>
       </div>
 
       <div className="big-field">
