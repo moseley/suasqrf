@@ -106,7 +106,10 @@ export async function reverseGeocode(
 
     const parts = body.address ?? {};
     // Prefer a short postal-style line over Nominatim's very long display_name.
-    const street = [parts.house_number, parts.road].filter(Boolean).join(" ");
+    // A fix landing between buildings comes back as "1315;1317;1319" — take the
+    // first, which is a real address rather than a list a courier cannot use.
+    const houseNumber = parts.house_number?.split(";")[0]?.trim();
+    const street = [houseNumber, parts.road].filter(Boolean).join(" ");
     const city = parts.city ?? parts.town ?? parts.village ?? parts.suburb;
     const short = [street, city, parts.state, parts.postcode].filter(Boolean).join(", ");
 
